@@ -50,6 +50,7 @@ app.get('/api/health', (_request, response) => {
   const cjConfig = getCJConfig()
   response.json({
     status: 'ok',
+    supabaseConfigured: Boolean(supabase),
     stripeConfigured: Boolean(stripe),
     designAssistantConfigured: Boolean(openAiKey),
     cjConfigured: cjConfig.configured,
@@ -433,7 +434,7 @@ app.get('/api/exchange-rates', async (_request, response) => {
 })
 
 async function getStoreProducts() {
-  if (!supabase) return []
+  if (!supabase) throw new Error('Supabase is not configured on the server.')
   const { data, error } = await supabase
     .from('products')
     .select('id,name,category,price_cents,stock,image,is_active')
