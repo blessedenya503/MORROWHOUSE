@@ -189,6 +189,9 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .supplier-approve { min-height: 30px; border: 1px solid #d8d3ca; padding: 0 9px; color: var(--admin-wine); background: #f8f3f0; font-size: 8px; cursor: pointer; }
 .supplier-approve:disabled { opacity: 0.45; cursor: not-allowed; }
 .supplier-approve:hover { border-color: #c5b2a5; background: #f0e4df; }
+.supplier-sync-stock { min-height: 30px; border: 1px solid var(--admin-line); padding: 0 7px; color: var(--admin-muted); background: white; font-size: 8px; cursor: pointer; }
+.supplier-sync-stock:disabled { cursor: wait; }
+.supplier-sync-stock:hover:not(:disabled) { color: var(--admin-wine); background: #f8f3f0; }
 .table-scroll { width: 100%; overflow-x: auto; }
 .orders-table, .inventory-table { width: 100%; border-collapse: collapse; text-align: left; }
 .orders-table th, .inventory-table th { height: 34px; padding: 0 11px; border-top: 1px solid var(--admin-line); border-bottom: 1px solid var(--admin-line); color: #8b877d; font-size: 7px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; white-space: nowrap; }

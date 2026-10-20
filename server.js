@@ -3,7 +3,6 @@ import express from 'express'
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
 import { buildApprovedMorrowHouseProduct, buildCJOrderPayload, buildCJProductImportPayload, buildCJSyncSummary, getCJConfig, getCJHealthStatus, getProductDetails, getProductInventory, getProductVariants, summarizeProductName, summarizeProductText } from './services/cj/index.js'
 
@@ -18,7 +17,7 @@ const supabase = supabaseUrl && supabaseServiceRoleKey
   ? createClient(supabaseUrl, supabaseServiceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } })
   : null
 const openAiKey = process.env.OPENAI_API_KEY || ''
-const root = path.dirname(fileURLToPath(import.meta.url))
+const root = process.cwd()
 const shippingThreshold = 15000
 const assistantRequestBuckets = new Map()
 let exchangeRatesCache = null

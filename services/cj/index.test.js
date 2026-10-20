@@ -107,6 +107,45 @@ test('CJ product search sends a live keyword request and normalizes listV2 resul
   }
 })
 
+test('CJ inventory lookup sends the product ID and normalizes verified stock', async () => {
+  const previousFetch = global.fetch
+  global.fetch = async (url, options) => {
+    const parsedUrl = new URL(String(url))
+    assert.equal(parsedUrl.pathname, '/api2.0/v1/product/stock/getInventoryByPid')
+    assert.equal(parsedUrl.searchParams.get('pid'), 'cj-product-1')
+    assert.equal(options.method, 'GET')
+    return {
+      ok: true,
+      text: async () => JSON.stringify({
+        code: 200,
+        result: true,
+        data: {
+          inventoryList: [
+            { vid: 'variant-1', availableNum: 7 },
+            { vid: 'variant-2', totalInventory: 4 },
+          ],
+        },
+      }),
+    }
+  }
+
+  try {
+    const { getProductInventory, normalizeCJInventoryResponse } = await loadFreshModule({
+      CJ_API_BASE_URL: 'https://developers.cjdropshipping.com/api2.0/v1',
+      CJ_ACCESS_TOKEN: 'demo-token',
+    })
+    const response = await getProductInventory({ productId: 'cj-product-1' })
+    const inventory = normalizeCJInventoryResponse(response)
+
+    assert.deepEqual(inventory.map((entry) => [entry.cjVariantId, entry.stock]), [
+      ['variant-1', 7],
+      ['variant-2', 4],
+    ])
+  } finally {
+    global.fetch = previousFetch
+  }
+})
+
 test('CJ import payload normalizes supplier details into a backend-safe record', async () => {
   const { buildCJProductImportPayload } = await loadFreshModule({ CJ_API_BASE_URL: 'https://example.test', CJ_API_KEY: 'example-key', CJ_API_SECRET: 'example-secret' })
 

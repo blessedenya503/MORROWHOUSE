@@ -2,7 +2,7 @@ import 'dotenv/config'
 import express from 'express'
 import { createClient } from '@supabase/supabase-js'
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
-import { buildCJProductImportPayload, getCJConfig, getProductDetails, normalizeCJProductSearchResults, searchProducts } from '../services/cj/index.js'
+import { buildCJProductImportPayload, getCJConfig, getProductDetails, getProductInventory, normalizeCJInventoryResponse, normalizeCJProductSearchResults, searchProducts } from '../services/cj/index.js'
 
 const host = '127.0.0.1'
 const port = Number(process.env.ADMIN_API_PORT || 4243)
@@ -324,7 +324,9 @@ async function importCJProductToSupabase(productId) {
   if (!productDetail || typeof productDetail !== 'object' || !productDetail.pid) {
     throw new Error('CJ did not return product details for the requested product ID.')
   }
-  const payload = buildCJProductImportPayload(productDetail)
+  const inventoryResponse = await getProductInventory({ productId })
+  const inventory = normalizeCJInventoryResponse(inventoryResponse)
+  const payload = buildCJProductImportPayload(productDetail, [], inventory)
 
   const { data, error } = await supabase
     .from('cj_products')
@@ -509,6 +511,39 @@ app.post('/api/admin/cj/products/search', async (request, response) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'The CJ product search failed.'
     response.status(500).json({ error: message })
+  }
+})
+
+app.post('/api/admin/cj/products/:productId/sync-inventory', async (request, response) => {
+  if (!supabase) return response.status(503).json({ error: 'Supplier sync is not configured. Add Supabase to the admin environment.' })
+  if (!getCJConfig().configured) return response.status(503).json({ error: 'CJdropshipping is not configured on the server.' })
+
+  const productId = String(request.params.productId || '').trim()
+  try {
+    const { data: supplierProduct, error: lookupError } = await supabase
+      .from('cj_products')
+      .select('cj_product_id')
+      .eq('cj_product_id', productId)
+      .single()
+
+    if (lookupError) throw lookupError
+    if (!supplierProduct) return response.status(404).json({ error: 'Imported CJ product not found.' })
+
+    const inventoryResponse = await getProductInventory({ productId })
+    const inventory = normalizeCJInventoryResponse(inventoryResponse)
+    if (!inventory.length) throw new Error('CJ returned no inventory records for this product.')
+
+    const { data, error } = await supabase
+      .from('cj_products')
+      .update({ inventory, updated_at: new Date().toISOString() })
+      .eq('cj_product_id', productId)
+      .select()
+      .single()
+
+    if (error) throw error
+    response.json({ ok: true, product: normalizeCJProduct(data) })
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : 'CJ inventory could not be refreshed.' })
   }
 })
 

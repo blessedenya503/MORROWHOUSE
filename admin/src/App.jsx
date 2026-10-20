@@ -130,7 +130,7 @@ function InventoryTable({ products, onStockChange }) {
   )
 }
 
-function SupplierTable({ products, syncSummary = {}, onApprove, onImportProduct, onSearchProducts, importPanelRef, importInputRef }) {
+function SupplierTable({ products, syncSummary = {}, onApprove, onImportProduct, onSearchProducts, onSyncStock, importPanelRef, importInputRef }) {
   const summary = syncSummary || {}
   const lastUpdated = summary.lastUpdated ? new Date(summary.lastUpdated).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'No sync yet'
   const [searchQuery, setSearchQuery] = useState('')
@@ -138,6 +138,7 @@ function SupplierTable({ products, syncSummary = {}, onApprove, onImportProduct,
   const [searchError, setSearchError] = useState('')
   const [searchPending, setSearchPending] = useState(false)
   const [importingId, setImportingId] = useState('')
+  const [syncingId, setSyncingId] = useState('')
   const [profitMargin, setProfitMargin] = useState('50')
   const importedIds = new Set(products.map((product) => product.id))
 
@@ -179,6 +180,15 @@ function SupplierTable({ products, syncSummary = {}, onApprove, onImportProduct,
       await onImportProduct(productId)
     } finally {
       setImportingId('')
+    }
+  }
+
+  async function handleSyncStock(productId) {
+    setSyncingId(productId)
+    try {
+      await onSyncStock(productId)
+    } finally {
+      setSyncingId('')
     }
   }
 
@@ -243,7 +253,7 @@ function SupplierTable({ products, syncSummary = {}, onApprove, onImportProduct,
               <td>{formatCurrency(product.price || 0)}</td>
               <td>{getRetailPrice(product) > 0 ? formatCurrency(getRetailPrice(product)) : '—'}</td>
               <td>{getPublishStock(product) || 'Unavailable'}</td>
-              <td><div className="supplier-actions"><span className={`stock-health ${product.isActive ? 'is-healthy' : 'is-low'}`}><i />{product.isActive ? 'Active' : 'Pending'}</span><button type="button" className="supplier-approve" disabled={!canApprove(product)} onClick={() => onApprove(product.id, getRetailPrice(product), getPublishStock(product))}>Publish</button></div></td>
+              <td><div className="supplier-actions"><span className={`stock-health ${product.isActive ? 'is-healthy' : 'is-low'}`}><i />{product.isActive ? 'Active' : 'Pending'}</span>{getPublishStock(product) === 0 && <button type="button" className="supplier-sync-stock" disabled={Boolean(syncingId)} onClick={() => handleSyncStock(product.id)}>{syncingId === product.id ? <CircleNotch className="spin" size={12} /> : 'Sync stock'}</button>}<button type="button" className="supplier-approve" disabled={!canApprove(product)} title={!getPublishStock(product) ? 'Sync verified CJ stock before publishing.' : ''} onClick={() => onApprove(product.id, getRetailPrice(product), getPublishStock(product))}>Publish</button></div></td>
             </tr>)}</tbody>
           </table>
         </div>
@@ -253,7 +263,7 @@ function SupplierTable({ products, syncSummary = {}, onApprove, onImportProduct,
   )
 }
 
-function Dashboard({ data, onReload, onLogout, onUpdateStock, onUpdateOrder, onApproveSupplier, onImportSupplier, onSearchSupplier, message, pending }) {
+function Dashboard({ data, onReload, onLogout, onUpdateStock, onUpdateOrder, onApproveSupplier, onImportSupplier, onSearchSupplier, onSyncSupplierStock, message, pending }) {
   const [activeView, setActiveView] = useState('overview')
   const [search, setSearch] = useState('')
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false)
@@ -310,7 +320,7 @@ function Dashboard({ data, onReload, onLogout, onUpdateStock, onUpdateOrder, onA
 
           {activeView === 'inventory' && <motion.section key="inventory" className="panel table-panel full-table-panel" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24 }}><div className="panel-heading"><div><span className="eyebrow">{data.products.length} LISTED PRODUCTS</span><h2>Count what matters.</h2></div><span className="table-heading-note"><span className="stock-legend-dot" /> Low stock at reorder point</span></div><InventoryTable products={filteredProducts} onStockChange={onUpdateStock} /><p className="table-footnote">{data.mode === 'live' ? 'Stock changes persist to the connected Supabase products table.' : 'Empty workspace — no product records are available yet.'}</p></motion.section>}
 
-          {activeView === 'supplier' && <motion.section key="supplier" className="supplier-stack" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24 }}><SupplierTable products={data.supplier || []} syncSummary={data.syncSummary || {}} onApprove={onApproveSupplier} onImportProduct={onImportSupplier} onSearchProducts={onSearchSupplier} importPanelRef={supplierImportPanelRef} importInputRef={supplierImportInputRef} /></motion.section>}
+          {activeView === 'supplier' && <motion.section key="supplier" className="supplier-stack" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24 }}><SupplierTable products={data.supplier || []} syncSummary={data.syncSummary || {}} onApprove={onApproveSupplier} onImportProduct={onImportSupplier} onSearchProducts={onSearchSupplier} onSyncStock={onSyncSupplierStock} importPanelRef={supplierImportPanelRef} importInputRef={supplierImportInputRef} /></motion.section>}
         </main>
       </div>
     </div>
@@ -414,6 +424,17 @@ export default function App() {
     return adminRequest('cj/products/search', { method: 'POST', body: JSON.stringify({ query }) })
   }
 
+  async function handleSyncSupplierStock(productId) {
+    setLoadError('')
+    try {
+      await adminRequest(`cj/products/${encodeURIComponent(productId)}/sync-inventory`, { method: 'POST' })
+      await loadDashboard()
+      setMessage('Verified CJ stock refreshed.')
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'CJ inventory could not be refreshed.')
+    }
+  }
+
   async function logout() {
     try { await adminRequest('logout', { method: 'POST' }) } finally {
       setAuthenticated(false)
@@ -425,7 +446,7 @@ export default function App() {
   return (
     <MotionConfig reducedMotion="user">
       <div className="admin-app">
-        {checkingSession ? <main className="admin-loading"><CircleNotch className="spin" size={22} /><span>Checking this private workspace…</span></main> : authenticated && data ? <Dashboard data={data} onReload={loadDashboard} onLogout={logout} onUpdateStock={(id, stock) => updateRecord(`products/${encodeURIComponent(id)}`, { stock }, 'Stock level updated in this preview.')} onUpdateOrder={(id, status) => updateRecord(`orders/${encodeURIComponent(id)}`, { status }, 'Order status updated in this preview.')} onApproveSupplier={handleApproveSupplier} onApproveAllSupplier={handleApproveAllSupplier} onImportSupplier={handleImportSupplier} onSearchSupplier={handleSearchSupplier} message={message || loadError} pending={pending} /> : <AnimatePresence mode="wait"><motion.div key="login" initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><LoginPage onLogin={loadDashboard} /></motion.div></AnimatePresence>}
+        {checkingSession ? <main className="admin-loading"><CircleNotch className="spin" size={22} /><span>Checking this private workspace…</span></main> : authenticated && data ? <Dashboard data={data} onReload={loadDashboard} onLogout={logout} onUpdateStock={(id, stock) => updateRecord(`products/${encodeURIComponent(id)}`, { stock }, 'Stock level updated in this preview.')} onUpdateOrder={(id, status) => updateRecord(`orders/${encodeURIComponent(id)}`, { status }, 'Order status updated in this preview.')} onApproveSupplier={handleApproveSupplier} onApproveAllSupplier={handleApproveAllSupplier} onImportSupplier={handleImportSupplier} onSearchSupplier={handleSearchSupplier} onSyncSupplierStock={handleSyncSupplierStock} message={message || loadError} pending={pending} /> : <AnimatePresence mode="wait"><motion.div key="login" initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><LoginPage onLogin={loadDashboard} /></motion.div></AnimatePresence>}
       </div>
     </MotionConfig>
   )

@@ -226,6 +226,7 @@ export async function getProductVariants({ productId, path } = {}) {
   return cjRequest({
     path: endpoint.replace('{productId}', encodeURIComponent(String(productId))),
     method: 'GET',
+    query: { pid: String(productId) },
   })
 }
 
@@ -235,7 +236,25 @@ export async function getProductInventory({ productId, path } = {}) {
   return cjRequest({
     path: endpoint.replace('{productId}', encodeURIComponent(String(productId))),
     method: 'GET',
+    query: { pid: String(productId) },
   })
+}
+
+export function normalizeCJInventoryResponse(response = {}) {
+  const data = response && typeof response === 'object' && 'data' in response ? response.data : response
+  const entries = Array.isArray(data)
+    ? data
+    : [data?.inventoryList, data?.variantInventoryList, data?.list, data?.content, data?.inventory].find(Array.isArray) || []
+
+  return entries.map((entry) => {
+    const rawStock = entry?.availableInventory ?? entry?.availableNum ?? entry?.totalInventory ?? entry?.totalInventoryNum ?? entry?.inventoryNum ?? entry?.storageNum ?? entry?.stock ?? entry?.quantity ?? entry?.inventory ?? 0
+    const stock = Number(rawStock)
+    return {
+      cjVariantId: String(entry?.vid ?? entry?.variantId ?? entry?.cjVariantId ?? entry?.id ?? ''),
+      stock: Number.isFinite(stock) ? Math.max(0, stock) : 0,
+      raw: entry ?? null,
+    }
+  }).filter((entry) => entry.cjVariantId)
 }
 
 export async function getProductPricing({ productId, path } = {}) {
