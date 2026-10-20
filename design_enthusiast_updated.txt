@@ -1,0 +1,30 @@
+
+  function DesignEnthusiast() {
+    const reduceMotion = useReducedMotion()
+    const [question, setQuestion] = useState('')
+    const [messages, setMessages] = useState([])
+    const [assistantMode, setAssistantMode] = useState('checking')
+    const [isAnswering, setIsAnswering] = useState(false)
+    const messageEndRef = useRef(null)
+    const DESIGN_ENTHUSIAST_STORAGE_KEY = 'morrow-house-design-enthusiast-messages'
+    useEffect(() => {
+      try {
+        const savedMessages = window.localStorage.getItem(DESIGN_ENTHUSIAST_STORAGE_KEY)
+        if (savedMessages) {
+          setMessages(JSON.parse(savedMessages))
+        }
+      } catch (error) {
+        console.warn('Failed to load design enthusiast messages:', error)
+      }
+    }, [])
+    useEffect(() => {
+      try {
+        window.localStorage.setItem(DESIGN_ENTHUSIAST_STORAGE_KEY, JSON.stringify(messages))
+      } catch (error) {
+        console.warn('Failed to save design enthusiast messages:', error)
+      }
+    }, [messages])
+    useEffect(() => {
+      let active = true
+        }
+        .then((response) => response.json())

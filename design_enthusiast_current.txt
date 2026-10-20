@@ -1,0 +1,415 @@
+﻿
+  import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useMemo } from 'react'
+  import { ArrowRight, CheckCircle, CircleNotch, Heart, LockKey, MagnifyingGlass, Minus, PaperPlaneRight, Plus, 
+ShoppingBag, Sparkle, Trash, WarningCircle, X } from '@phosphor-icons/react'
+  import { AnimatePresence, MotionConfig, motion, useReducedMotion, useScroll, useTransform } from 'framer-motion'
+  import countryToCurrency from 'country-to-currency'
+  import RibbonGlow from './components/RibbonGlow.jsx'
+  import './App.css'
+  
+  const revealItem = {
+    hidden: { opacity: 0, y: 22 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.62, ease: [0.22, 1, 0.36, 1] } },
+  }
+  
+  const revealGroup = {
+    hidden: {},
+    visible: { transition: { staggerChildren: 0.12, delayChildren: 0.04 } },
+  }
+  
+  const cardVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.5,
+        ease: [0.22, 1, 0.36, 1]
+      }
+    }
+  }
+  
+  const categories = [
+    { name: 'Living', label: 'A softer place to land', image: 'photo-1600210492486-724fe5c67fb0' },
+    { name: 'Lighting', label: 'Set a different mood', image: 'photo-1507473885765-e6ed057f782c' },
+    { name: 'Objects', label: 'The little things, considered', image: 'photo-1490312278390-ab64016e0aa9' },
+  ]
+  
+  const currencyOptions = [
+    { code: 'USD', name: 'US Dollar' },
+    { code: 'NGN', name: 'Nigerian Naira' },
+    { code: 'GBP', name: 'British Pound' },
+    { code: 'EUR', name: 'Euro' },
+    { code: 'CAD', name: 'Canadian Dollar' },
+    { code: 'AUD', name: 'Australian Dollar' },
+    { code: 'GHS', name: 'Ghanaian Cedi' },
+    { code: 'KES', name: 'Kenyan Shilling' },
+    { code: 'ZAR', name: 'South African Rand' },
+    { code: 'INR', name: 'Indian Rupee' },
+  ]
+  
+  const manualCurrencyStorageKey = 'morrow-house-display-currency'
+  const detectedCurrencyStorageKey = 'morrow-house-detected-currency'
+  const CurrencyContext = createContext({ currency: 'USD', exchangeRate: 1, rates: { USD: 1 }, currencyReady: false, 
+onCurrencyChange: () => {} })
+  
+  function useCurrency() {
+    return useContext(CurrencyContext)
+  }
+  
+  function CurrencySelector() {
+    const { currency, rates, currencyReady, onCurrencyChange } = useCurrency()
+    const options = currencyOptions.filter(({ code }) => Number.isFinite(rates[code]))
+    if (currency !== 'USD' && !options.some(({ code }) => code === currency) && Number.isFinite(rates[currency])) {
+      options.push({ code: currency, name: currency })
+    }
+  
+    return (
+      <label className="currency-selector">
+        <span className="sr-only">Display currency</span>
+        <select aria-label="Display currency" value={currency} disabled={!currencyReady} onChange={(event) => 
+onCurrencyChange(event.target.value)}>
+          {options.map(({ code }) => <option key={code} value={code}>{code}</option>)}
+        </select>
+        <span className="currency-charge-note">Checkout in USD</span>
+      </label>
+    )
+  }
+  
+  const imageUrl = (photo, width = 1000) => {
+    if (typeof photo !== 'string' || !photo) return ''
+    if (/^https?:\/\//i.test(photo)) return photo
+    return `https://images.unsplash.com/${photo}?auto=format&fit=crop&w=${width}&q=85`
+  }
+  
+  const formatPrice = (price, currency = 'USD', exchangeRate = 1) =>
+    new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(price * exchangeRate)
+  
+  function getRoutePath() {
+    return window.location.pathname.replace(/\/+$/, '') || '/'
+  }
+  
+  function getSavedCart() {
+    try {
+      const savedCart = JSON.parse(window.localStorage.getItem('morrow-house-cart') || '{}')
+      return savedCart && typeof savedCart === 'object' && !Array.isArray(savedCart) ? savedCart : {}
+    } catch {
+      return {}
+    }
+  }
+  
+  function getSavedCurrency() {
+    try {
+      return window.localStorage.getItem(manualCurrencyStorageKey) || 'USD'
+    } catch {
+      return 'USD'
+    }
+  }
+  
+  const designQuestions = [
+    'Help me make a small living room feel finished',
+    'What would make a thoughtful housewarming gift?',
+    'How can I make my evenings feel cozier?',
+  ]
+  
+> function DesignEnthusiast() {
+    const reduceMotion = useReducedMotion()
+    const [question, setQuestion] = useState('')
+    const [messages, setMessages] = useState([])
+    const [assistantMode, setAssistantMode] = useState('checking')
+    const [isAnswering, setIsAnswering] = useState(false)
+    const messageEndRef = useRef(null)
+  
+    useEffect(() => {
+      let active = true
+      fetch('/api/health')
+        .then((response) => response.json())
+        .then((health) => {
+          if (active) setAssistantMode(health.designAssistantConfigured ? 'ai' : 'guide')
+        })
+        .catch(() => {
+          if (active) setAssistantMode('guide')
+        })
+      return () => { active = false }
+    }, [])
+  
+    useEffect(() => {
+      if (!messages.length && !isAnswering) return
+      messageEndRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'end' })
+    }, [messages, isAnswering, reduceMotion])
+  
+    async function askDesignEnthusiast(value = question) {
+      const prompt = value.trim()
+      if (!prompt || isAnswering) return
+  
+      setMessages((current) => [...current, { id: `${Date.now()}-customer`, role: 'customer', content: prompt }])
+      setQuestion('')
+      setIsAnswering(true)
+  
+      try {
+        const response = await fetch('/api/design-assistant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: prompt }),
+          signal: AbortSignal.timeout(20_000),
+        })
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.error || 'The design desk is taking a little breather. Try again in a 
+moment.')
+        setAssistantMode(result.mode || 'guide')
+        setMessages((current) => [...current, { id: `${Date.now()}-assistant`, role: 'assistant', content: 
+result.answer }])
+      } catch (error) {
+        setMessages((current) => [...current, {
+          id: `${Date.now()}-assistant-error`,
+          role: 'assistant',
+          content: error instanceof Error ? error.message : 'The design desk is taking a little breather. Try again in 
+a moment.',
+        }])
+      } finally {
+        setIsAnswering(false)
+      }
+    }
+  
+    function handleSubmit(event) {
+      event.preventDefault()
+      askDesignEnthusiast()
+    }
+  
+    return (
+      <motion.section className="design-enthusiast" id="design-enthusiast" aria-labelledby="design-enthusiast-title" 
+initial={reduceMotion ? false : 'hidden'} whileInView="visible" viewport={{ once: true, amount: 0.12 }} 
+variants={reduceMotion ? undefined : revealGroup}>
+        <div className="section-wrap design-enthusiast-layout">
+          <motion.div className="design-enthusiast-intro" variants={reduceMotion ? undefined : revealItem}>
+            <span className="overline"><Sparkle size={13} weight="fill" /> THE MORROW HOUSE DESIGN DESK</span>
+            <h2 id="design-enthusiast-title">Meet your<br /><em>design enthusiast.</em></h2>
+            <p>Small-room dilemmas, softer evenings, the gift theyâ€™ll actually keep. Letâ€™s find a thoughtful 
+answer together.</p>
+            <div className="design-note"><span className="design-note-mark"><Sparkle size={16} 
+/></span><span>Collection-aware suggestions, always grounded in what we actually know.</span></div>
+          </motion.div>
+  
+          <motion.div className="assistant-panel" variants={reduceMotion ? undefined : revealItem}>
+            <div className="assistant-panel-header">
+              <div className="assistant-avatar"><Sparkle size={18} weight="fill" /></div>
+              <div className="assistant-identity"><strong>The Design Enthusiast</strong><span>Morrow House Â· here for 
+the details</span></div>
+              <span className={`assistant-mode ${assistantMode === 'ai' ? 'is-live' : ''}`}><span />{assistantMode === 
+'ai' ? 'LIVE AI' : assistantMode === 'checking' ? 'CONNECTING' : 'DESIGN GUIDE'}</span>
+            </div>
+  
+            <div className="assistant-conversation" role="log" aria-label="Conversation with the Design Enthusiast" 
+aria-live="polite" aria-relevant="additions text">
+              {messages.length === 0 ? (
+                <div className="assistant-welcome">
+                  <span className="assistant-welcome-label">A NOTE FROM THE DESIGN DESK</span>
+                  <p>Tell me about your room, your mood, or the person youâ€™re shopping for. Iâ€™ll start with pieces 
+I know.</p>
+                </div>
+              ) : messages.map((message) => (
+                <motion.div className={`assistant-message ${message.role === 'customer' ? 'from-customer' : 
+'from-assistant'}`} key={message.id} initial={reduceMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 
+}} transition={{ duration: 0.22 }}>
+                  {message.role === 'assistant' && <span className="assistant-message-label">THE DESIGN 
+ENTHUSIAST</span>}
+                  <p>{message.content}</p>
+                </motion.div>
+              ))}
+              {isAnswering && <div className="assistant-thinking" role="status"><span /><span /><span /><span 
+className="sr-only">The Design Enthusiast is thinking</span></div>}
+              <div ref={messageEndRef} />
+            </div>
+  
+            <div className="assistant-suggestions" aria-label="Common questions">
+              {designQuestions.map((suggestion) => (
+                <button type="button" key={suggestion} disabled={isAnswering} onClick={() => 
+askDesignEnthusiast(suggestion)}>{suggestion}<ArrowRight size={13} /></button>
+              ))}
+            </div>
+  
+            <form className="assistant-composer" onSubmit={handleSubmit}>
+              <label className="sr-only" htmlFor="design-question">Ask the Design Enthusiast</label>
+              <textarea id="design-question" rows="1" maxLength="600" placeholder="Ask about a room, a piece, or a 
+good giftâ€¦" value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if 
+(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); handleSubmit(event) } }} />
+              <button type="submit" aria-label="Send your question" disabled={!question.trim() || 
+isAnswering}><PaperPlaneRight size={18} weight="fill" /></button>
+            </form>
+            <p className="assistant-disclosure">{assistantMode === 'ai' ? 'Live AI sends your question to OpenAI to 
+generate a reply. Please donâ€™t share personal details.' : 'Catalog-guide answers use listed products and delivery 
+details only. Anything unknown will be called out.'}</p>
+          </motion.div>
+        </div>
+      </motion.section>
+    )
+  }
+  
+  function CartPage({ cartProducts, cartItems, cartCount, subtotal, changeQuantity, onNavigate }) {
+    const reduceMotion = useReducedMotion()
+    const { currency, exchangeRate } = useCurrency()
+    const checkoutNotice = new URLSearchParams(window.location.search).get('payment') === 'cancelled'
+      ? 'Payment was canceled. Your bag is saved whenever you are ready.'
+      : ''
+    const shippingThreshold = 150
+    const shippingRemaining = Math.max(0, shippingThreshold - subtotal)
+    const shippingProgress = Math.min(100, (subtotal / shippingThreshold) * 100)
+  
+    return (
+      <motion.section className="cart-page section-wrap" aria-labelledby="cart-page-title" initial={reduceMotion ? 
+false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+        <nav className="cart-breadcrumb" aria-label="Breadcrumb">
+          <a href="/" onClick={(event) => onNavigate(event, '/')}>Home</a>
+          <span aria-hidden="true">/</span>
+          <span aria-current="page">Your bag</span>
+        </nav>
+  
+        <div className="cart-page-heading">
+          <div className="cart-glow"><RibbonGlow style={{ width: '100%', height: '100%' }} speed={0.65} hover={0.55} 
+/></div>
+          <div>
+            <span className="overline">GOOD CHOICES, ALREADY</span>
+            <h1 id="cart-page-title">Your bag<span>.</span></h1>
+          </div>
+          <span className="cart-page-count">{cartCount} {cartCount === 1 ? 'piece' : 'pieces'}</span>
+        </div>
+  
+        {cartProducts.length ? (
+          <div className="cart-page-layout">
+            <section className="cart-page-items" aria-label="Items in your bag">
+              <div className="cart-items-heading"><span>Item</span><span>Total</span></div>
+              <AnimatePresence initial={false}>
+                {cartProducts.map((product) => (
+                  <motion.article className="cart-page-item" key={product.id} layout initial={reduceMotion ? false : { 
+opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.24 }}>
+                    <img src={imageUrl(product.image, 360)} alt={`${product.name}`} />
+                    <div className="cart-page-item-info">
+                      <span className="cart-item-category">{product.category}</span>
+                      <h2>{product.name}</h2>
+                      <p>{product.detail}</p>
+                      <div className="cart-page-item-controls">
+                        <div className="quantity-control" aria-label={`Quantity for ${product.name}`}>
+                          <button type="button" onClick={() => changeQuantity(product.id, -1)} aria-label={`Remove one 
+${product.name}`}><Minus size={13} /></button>
+                          <span>{cartItems[product.id]}</span>
+                          <button type="button" onClick={() => changeQuantity(product.id, 1)} aria-label={`Add one 
+${product.name}`}><Plus size={13} /></button>
+                        </div>
+                        <button type="button" className="remove-item" onClick={() => changeQuantity(product.id, 
+-cartItems[product.id])} aria-label={`Remove ${product.name} from bag`}><Trash size={15} /><span>Remove</span></button>
+                      </div>
+                    </div>
+                    <strong className="cart-page-item-total">{formatPrice(product.price * cartItems[product.id], 
+currency, exchangeRate)}</strong>
+                  </motion.article>
+                ))}
+              </AnimatePresence>
+              <a className="continue-shopping" href="/" onClick={(event) => onNavigate(event, '/')}> <ArrowRight 
+size={15} /> Keep looking around</a>
+            </section>
+  
+            <aside className="order-summary" aria-labelledby="order-summary-title">
+              <span className="overline">THE IMPORTANT DETAILS</span>
+              <h2 id="order-summary-title">Order summary</h2>
+              <div className="shipping-unlock">
+                <div className="shipping-track" role="progressbar" aria-label="Progress toward complimentary shipping" 
+aria-valuemin="0" aria-valuemax={shippingThreshold * exchangeRate} aria-valuenow={Math.min(subtotal, 
+shippingThreshold) * exchangeRate}>
+                  <span style={{ width: `${shippingProgress}%` }} />
+                </div>
+                <p>{shippingRemaining ? `You're ${formatPrice(shippingRemaining, currency, exchangeRate)} away from 
+complimentary shipping.` : 'Complimentary shipping is yours.'}</p>
+              </div>
+              <div className="summary-line"><span>Items Â· {cartCount} {cartCount === 1 ? 'piece' : 
+'pieces'}</span><strong>{formatPrice(subtotal, currency, exchangeRate)}</strong></div>
+              <div className="summary-line summary-muted"><span>Shipping</span><span>Calculated at 
+checkout</span></div>
+              <div className="summary-total"><span>Subtotal</span><strong>{formatPrice(subtotal, currency, 
+exchangeRate)}</strong></div>
+              <p className="summary-footnote">Delivery options and the final total are confirmed by Stripe before 
+payment.</p>
+              <a className="checkout-button" href="/checkout" onClick={(event) => onNavigate(event, 
+'/checkout')}>Review order <ArrowRight size={17} /></a>
+              <div className="checkout-security"><LockKey size={14} /><span>Secure payment through Stripe</span></div>
+              {checkoutNotice && <p className="checkout-notice" role="status" aria-live="polite">{checkoutNotice}</p>}
+              <div className="summary-assurance"><span>30 days to make yourself at home</span><span>Thoughtfully 
+packed, always</span></div>
+            </aside>
+          </div>
+        ) : (
+          <div className="cart-empty-state">
+            <div className="empty-bag-mark"><ShoppingBag size={25} /></div>
+            <h2>Nothing in here. Yet.</h2>
+            <p>The best rooms start with one good find.</p>
+            <a className="hero-cta" href="/" onClick={(event) => onNavigate(event, '/')}>Find your first favorite 
+<ArrowRight size={17} /></a>
+          </div>
+        )}
+      </motion.section>
+    )
+  }
+  
+  function CheckoutSuccess({ status, error, sessionId, onNavigate }) {
+    const isPaid = status === 'paid'
+    const isChecking = status === 'checking'
+  
+    return (
+      <motion.section className="payment-return section-wrap" aria-live="polite" 
+aria-labelledby="payment-return-title" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ 
+duration: 0.35 }}>
+        <div className={`payment-return-mark ${isPaid ? 'is-paid' : isChecking ? 'is-checking' : 'has-error'}`}>
+          {isPaid ? <CheckCircle size={29} /> : isChecking ? <CircleNotch className="checkout-spinner" size={25} /> : 
+<WarningCircle size={29} />}
+        </div>
+        <span className="overline">{isPaid ? 'PAYMENT CONFIRMED' : isChecking ? 'ONE MOMENT' : 'PAYMENT STATUS'}</span>
+        <h1 id="payment-return-title">{isPaid ? <>Good things<br /><em>are on their way.</em></> : isChecking ? 
+'Confirming your payment.' : 'We couldnâ€™t confirm that payment.'}</h1>
+        <p>{isPaid ? 'Stripe has confirmed your payment. Keep your Stripe receipt for your records.' : isChecking ? 
+'Weâ€™re securely checking the payment status with Stripe.' : error || 'Your bag is still saved. Check your payment 
+status with Stripe before trying again.'}</p>
+        <div className="payment-return-actions">
+          <a className="hero-cta" href="/shop" onClick={(event) => onNavigate(event, '/shop')}>Back to the shop 
+<ArrowRight size={17} /></a>
+          {isPaid && <a className="text-link" href={`/track-order?session_id=${encodeURIComponent(sessionId || '')}`} 
+onClick={(event) => onNavigate(event, `/track-order?session_id=${encodeURIComponent(sessionId || '')}`)}>Track your 
+order <ArrowRight size={15} /></a>}
+        </div>
+      </motion.section>
+    )
+  }
+  
+  function ProductTile({ product, index, onNavigate, onAdd, isFavorite, onToggleFavorite }) {
+    const reduceMotion = useReducedMotion()
+    const { currency, exchangeRate } = useCurrency()
+    const productPath = `/product/${product.id}`
+  
+    // Enhanced product card variants with more sophisticated animations
+    const enhancedCardVariants = {
+      hidden: { opacity: 0, y: 10, scale: 0.95 },
+      visible: {
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        transition: {
+          type: "spring",
+          stiffness: 300,
+          damping: 20
+        }
+      }
+    }
+  
+    // Image hover and press lift animation
+    const imageVariants = {
+      idle: { scale: 1, rotate: 0 },
+      hover: { scale: 1.04, rotate: 0 },
+      press: { scale: 0.96, rotate: 0 }
+    }
+  
+    return (
+      <motion.article
+        className="product-card"
+        layout
+        initial={reduceMotion ? false : "hidden"}
+        whileInView="visible"
+
+

@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "project": {
+    "name": "trial",
+    "productType": "Premium home and living ecommerce storefront",
+    "stack": [
+      "react",
+      "shadcn",
+      "tailwind-v4",
+      "vite"
+    ]
+  },
+  "sources": {
+    "tokens": [
+      "src/index.css",
+      "src/app.css"
+    ],
+    "components": [],
+    "assets": [
+      "src/assets"
+    ],
+    "instructions": []
+  },
+  "design": {
+    "colorMode": "light",
+    "colors": {
+      "canvas": "#fbfaf7",
+      "ink": "#282622",
+      "accent": "#743f3b",
+      "secondary": "#59634e"
+    },
+    "typography": {
+      "display": "Cormorant Garamond",
+      "body": "DM Sans"
+    },
+    "spacing": {},
+    "radius": {},
+    "shadows": {},
+    "motion": {
+      "system": "Framer Motion",
+      "scroll": "Subtle one-time section reveals, staggered collections, and gentle hero-image parallax",
+      "reducedMotion": "Honor the operating-system preference and show content immediately"
+    },
+    "density": "unknown"
+  },
+  "components": {
+    "installed": [],
+    "preferredPrimitives": [],
+    "patterns": []
+  },
+  "constraints": {
+    "must": [],
+    "avoid": []
+  },
+  "decisions": [
+    "Use an editorial, premium home-and-living storefront identity with real interior photography, persuasive but transparent product copy, and working shop interactions.",
+    "Use restrained Framer Motion scroll reveals and transitions; disable movement for reduced-motion preferences."
+  ],
+  "evidence": [
+    {
+      "fact": "design.colorMode:light",
+      "source": "src/index.css, src/app.css"
+    },
+    {
+      "fact": "design.tokens",
+      "source": "src/app.css"
+    },
+    {
+      "fact": "design.tokens",
+      "source": "src/index.css"
+    },
+    {
+      "fact": "project.stack:react",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:shadcn",
+      "source": "components.json"
+    },
+    {
+      "fact": "project.stack:tailwind-v4",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:vite",
+      "source": "package.json"
+    }
+  ],
+  "generatedAt": "2026-09-30T08:00:38.213Z"
+}
