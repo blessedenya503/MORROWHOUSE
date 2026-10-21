@@ -242,9 +242,24 @@ export async function getProductInventory({ productId, path } = {}) {
 
 export function normalizeCJInventoryResponse(response = {}) {
   const data = response && typeof response === 'object' && 'data' in response ? response.data : response
+  const variantEntries = Array.isArray(data?.variantInventories)
+    ? data.variantInventories.map((variant) => {
+      const stockGroups = Array.isArray(variant?.inventory) ? variant.inventory : []
+      const stockEntries = stockGroups.flatMap((group) => Array.isArray(group?.stock) ? group.stock : [])
+      const stock = stockEntries.reduce((total, entry) => {
+        const warehouseStock = Number(entry?.inventory ?? 0)
+        const factoryStock = Number(entry?.factoryInventory ?? 0)
+        return total + (Number.isFinite(warehouseStock) ? warehouseStock : 0) + (Number.isFinite(factoryStock) ? factoryStock : 0)
+      }, 0)
+
+      return { cjVariantId: String(variant?.vid ?? variant?.variantId ?? ''), stock, raw: variant ?? null }
+    })
+    : []
   const entries = Array.isArray(data)
     ? data
-    : [data?.inventoryList, data?.variantInventoryList, data?.list, data?.content, data?.inventory].find(Array.isArray) || []
+    : variantEntries.length
+      ? variantEntries
+      : [data?.inventoryList, data?.variantInventoryList, data?.list, data?.content, data?.inventory].find(Array.isArray) || []
 
   return entries.map((entry) => {
     const rawStock = entry?.availableInventory ?? entry?.availableNum ?? entry?.totalInventory ?? entry?.totalInventoryNum ?? entry?.inventoryNum ?? entry?.storageNum ?? entry?.stock ?? entry?.quantity ?? entry?.inventory ?? 0

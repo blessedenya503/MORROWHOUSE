@@ -120,9 +120,10 @@ test('CJ inventory lookup sends the product ID and normalizes verified stock', a
         code: 200,
         result: true,
         data: {
-          inventoryList: [
-            { vid: 'variant-1', availableNum: 7 },
-            { vid: 'variant-2', totalInventory: 4 },
+          inventories: [{ countryCode: 'CN', totalInventoryNum: 18 }],
+          variantInventories: [
+            { vid: 'variant-1', inventory: [{ stock: [{ inventory: 3, factoryInventory: 4 }, { inventory: 0, factoryInventory: 2 }] }] },
+            { vid: 'variant-2', inventory: [{ stock: [{ inventory: 4, factoryInventory: 5 }] }] },
           ],
         },
       }),
@@ -138,8 +139,8 @@ test('CJ inventory lookup sends the product ID and normalizes verified stock', a
     const inventory = normalizeCJInventoryResponse(response)
 
     assert.deepEqual(inventory.map((entry) => [entry.cjVariantId, entry.stock]), [
-      ['variant-1', 7],
-      ['variant-2', 4],
+      ['variant-1', 9],
+      ['variant-2', 9],
     ])
   } finally {
     global.fetch = previousFetch

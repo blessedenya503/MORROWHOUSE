@@ -41,9 +41,6 @@ async function safeInsertSyncLog(entityType, entityId, status, message, payload)
 
 app.disable('x-powered-by')
 app.use(express.json({ limit: '16kb' }))
-if (process.env.NETLIFY === 'true') {
-  app.use('/api/cj', (_request, response) => response.status(404).json({ error: 'Not found' }))
-}
 
 app.get('/api/health', (_request, response) => {
   response.set('Cache-Control', 'no-store')
@@ -737,20 +734,19 @@ app.get('/api/checkout_sessions/:sessionId', async (request, response) => {
   }
 })
 
-if (process.env.NODE_ENV === 'production' && process.env.NETLIFY !== 'true') {
+if (process.env.NODE_ENV === 'production') {
   const indexFile = path.join(root, 'dist', 'index.html')
   app.use(express.static(path.join(root, 'dist')))
-  app.get(['/', '/cart', '/checkout/success'], (_request, response, next) => {
+  app.use((request, response, next) => {
+    if (request.method !== 'GET' || request.path.startsWith('/api/')) return next()
     if (existsSync(indexFile)) return response.sendFile(indexFile)
     next()
   })
 }
 
-if (process.env.NETLIFY !== 'true') {
-  app.listen(port, () => {
-    console.log(`Morrow House API listening on http://localhost:${port}`)
-    if (!stripe) console.log('Stripe is not configured. Add STRIPE_SECRET_KEY to .env to enable payments.')
-  })
-}
+app.listen(port, () => {
+  console.log(`Morrow House API listening on http://localhost:${port}`)
+  if (!stripe) console.log('Stripe is not configured. Add STRIPE_SECRET_KEY to .env to enable payments.')
+})
 
 export { app }

@@ -245,7 +245,7 @@ function SupplierTable({ products, syncSummary = {}, onApprove, onImportProduct,
         </div>
         <div className="table-scroll">
           <table className="inventory-table">
-            <thead><tr><th>Product</th><th>SKU</th><th>Category</th><th>CJ price</th><th>Retail price</th><th>CJ stock</th><th>Status</th></tr></thead>
+            <thead><tr><th>Product</th><th>SKU</th><th>Category</th><th>CJ price</th><th>Retail price</th><th>Supplier stock</th><th>Status</th></tr></thead>
             <tbody>{products.map((product) => <tr key={product.id}>
               <td><div className="inventory-product">{product.image && <img src={imageUrl(product.image, 120)} alt="" />}<div><strong>{product.name}</strong><span>{product.id}</span></div></div></td>
               <td className="sku">{product.sku || '—'}</td>

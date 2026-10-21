@@ -10,13 +10,11 @@ A premium home-and-living storefront built with React, Vite, Framer Motion, and 
 
 The development command starts the Vite site and the Express API. The API health check is available at `http://127.0.0.1:4242/api/health`.
 
-## Deploy the storefront to Netlify
+## Run the production storefront
 
-The root `netlify.toml` builds the public storefront and routes its `/api/*` requests through a Netlify Function. Connect the Git repository in Netlify; the build command is `npm run build` and the publish directory is `dist`.
+Build the frontend with `npm run build`, then start the Express server with `NODE_ENV=production npm start`. The server listens on `PORT` (default `4242`), serves the built storefront, and handles `/api/*` requests. Set server-side environment variables (`APP_URL`, `STRIPE_SECRET_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and optional `OPENAI_API_KEY`) in the host's secret manager. Never add `.env` to Git.
 
-Add production credentials in Netlify's site environment-variable settings, not in the repository. Configure `APP_URL` to the deployed site URL, and provide the server-side keys required for the features you enable (`STRIPE_SECRET_KEY`, `OPENAI_API_KEY`, and the Supabase variables). Use a production Stripe key only after configuring Stripe's production settings. Never add `.env` to Git.
-
-The private admin app is intentionally not deployed. CJ management endpoints are disabled in the public Netlify Function; keep supplier operations on a separately secured server. Netlify deployment requires production environment variables and does not automatically configure Stripe, Supabase, or OpenAI accounts.
+Use a Node.js host that can run the Express server continuously. A static-only host cannot serve the API or checkout routes. The private admin app remains local and loopback-only; do not expose it publicly.
 
 ## Private admin dashboard
 
