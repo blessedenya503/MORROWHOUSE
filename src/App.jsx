@@ -394,6 +394,7 @@ function ProductTile({ product, index, onNavigate, onAdd, isFavorite, onToggleFa
         <div className="absolute top-2 right-2 z-10">
           <span className="product-badge">{product.badge}</span>
         </div>
+        <AddToBagButton product={product} onAdd={onAdd} className="quick-add" compact />
       </div>
       <div className="product-meta pt-4">
         <div className="mb-1">

@@ -41,6 +41,7 @@ async function safeInsertSyncLog(entityType, entityId, status, message, payload)
 
 app.disable('x-powered-by')
 app.use(express.json({ limit: '16kb' }))
+app.use('/api/cj', (_request, response) => response.status(404).json({ error: 'Not found' }))
 
 app.get('/api/health', (_request, response) => {
   response.set('Cache-Control', 'no-store')
@@ -690,6 +691,7 @@ app.post('/api/checkout_sessions', async (request, response) => {
     const freeShipping = subtotal >= shippingThreshold
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      payment_method_types: ['card'],
       line_items: lineItems,
       billing_address_collection: 'auto',
       shipping_address_collection: { allowed_countries: ['US', 'CA'] },
@@ -744,7 +746,7 @@ if (process.env.NODE_ENV === 'production') {
   })
 }
 
-app.listen(port, () => {
+app.listen(port, '0.0.0.0', () => {
   console.log(`Morrow House API listening on http://localhost:${port}`)
   if (!stripe) console.log('Stripe is not configured. Add STRIPE_SECRET_KEY to .env to enable payments.')
 })
