@@ -3,6 +3,7 @@ import { ArrowRight, CheckCircle, CircleNotch, Heart, LockKey, MagnifyingGlass, 
 import { AnimatePresence, MotionConfig, motion, useReducedMotion, useScroll, useTransform } from 'framer-motion'
 import countryToCurrency from 'country-to-currency'
 import RibbonGlow from './components/RibbonGlow.jsx'
+import { PaystackLogo } from './components/PaymentLogos.jsx'
 import './App.css'
 
 const revealItem = {
@@ -577,11 +578,17 @@ function ProductPage({ product, products, onNavigate, onAdd }) {
 }
 
 function CheckoutPage({ cartProducts, cartItems, cartCount, subtotal, onNavigate }) {
-  const { currency, exchangeRate } = useCurrency()
+  const { currency, exchangeRate, rates } = useCurrency()
   const [checkoutPending, setCheckoutPending] = useState(false)
   const [checkoutNotice, setCheckoutNotice] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('paystack')
+  const [customerEmail, setCustomerEmail] = useState('')
+  const [customerName, setCustomerName] = useState('')
 
-  async function beginCheckout() {
+  const freeShipping = subtotal >= 150
+  const finalTotalUsd = subtotal + (freeShipping ? 0 : 15)
+
+  async function beginStripeCheckout() {
     setCheckoutPending(true)
     setCheckoutNotice('')
     try {
@@ -600,11 +607,209 @@ function CheckoutPage({ cartProducts, cartItems, cartCount, subtotal, onNavigate
     }
   }
 
+  async function beginPaystackCheckout() {
+    if (!customerEmail.trim() || !customerEmail.includes('@')) {
+      setCheckoutNotice('Please enter a valid email address to receive your order receipt.')
+      return
+    }
+
+    setCheckoutPending(true)
+    setCheckoutNotice('')
+
+    try {
+      const ngnRate = Number(rates['NGN']) || 1480
+      const totalNgn = Math.round(finalTotalUsd * ngnRate)
+
+      const response = await fetch('/api/paystack/initialize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerEmail: customerEmail.trim(),
+          customerName: customerName.trim() || 'Morrow House Client',
+          items: cartProducts.map((product) => ({ productId: product.id, quantity: cartItems[product.id] })),
+          amountUsd: finalTotalUsd,
+          amountNgn: totalNgn,
+        }),
+      })
+
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Unable to initialize Paystack checkout.')
+      }
+
+      const win = window
+      const isMobile = typeof navigator !== 'undefined' && /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent)
+      const paystackPublicKey = 'pk_live_d2e4bb883f45096a034c3ed24d0ef6565d1a5484'
+
+      if (!isMobile && win.PaystackPop && typeof win.PaystackPop.setup === 'function') {
+        try {
+          const handler = win.PaystackPop.setup({
+            key: paystackPublicKey,
+            email: customerEmail.trim(),
+            amount: Math.round(totalNgn * 100),
+            currency: 'NGN',
+            ref: data.reference,
+            metadata: {
+              orderId: data.orderId,
+              customerName: customerName.trim() || 'Morrow House Client',
+            },
+            callback: function (resp) {
+              window.location.href = `/checkout/success?session_id=${resp.reference}&paystack=true`
+            },
+            onClose: function () {
+              setCheckoutPending(false)
+            },
+          })
+          handler.openIframe()
+          return
+        } catch (popupErr) {
+          console.warn('Paystack popup fallback to redirect:', popupErr)
+        }
+      }
+
+      if (data.authorizationUrl) {
+        window.location.assign(data.authorizationUrl)
+        return
+      }
+
+      throw new Error('Could not open Paystack payment window.')
+    } catch (error) {
+      setCheckoutNotice(error instanceof Error ? error.message : 'Paystack checkout failed. Please try again.')
+      setCheckoutPending(false)
+    }
+  }
+
+  function handleCheckout(e) {
+    e.preventDefault()
+    if (paymentMethod === 'stripe') {
+      beginStripeCheckout()
+    } else {
+      beginPaystackCheckout()
+    }
+  }
+
   return (
     <motion.section className="checkout-page section-wrap" aria-labelledby="checkout-title" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
       <nav className="cart-breadcrumb" aria-label="Breadcrumb"><a href="/" onClick={(event) => onNavigate(event, '/')}>Home</a><span>/</span><a href="/cart" onClick={(event) => onNavigate(event, '/cart')}>Your bag</a><span>/</span><span aria-current="page">Checkout</span></nav>
-      <div className="editorial-page-heading checkout-heading"><span className="overline">A FEW DETAILS, THEN YOU’RE THERE</span><h1 id="checkout-title">Review your<br /><em>good choices.</em></h1><p>Your order is safely checked out with Stripe. Shipping options and the final total are confirmed before payment.</p></div>
-      {cartProducts.length ? <div className="checkout-layout"><section className="checkout-review" aria-label="Order items"><h2>Your pieces <span>{cartCount}</span></h2>{cartProducts.map((product) => <article className="checkout-review-item" key={product.id}><img src={imageUrl(product.image, 260)} alt="" /><div><strong>{product.name}</strong><span>{product.detail}</span><span>Qty {cartItems[product.id]}</span></div><b>{formatPrice(product.price * cartItems[product.id], currency, exchangeRate)}</b></article>)}<a className="continue-shopping" href="/cart" onClick={(event) => onNavigate(event, '/cart')}>Edit your bag <ArrowRight size={15} /></a></section><aside className="order-summary checkout-summary"><span className="overline">THE IMPORTANT DETAILS</span><h2>Order summary</h2><div className="summary-line"><span>Items · {cartCount} {cartCount === 1 ? 'piece' : 'pieces'}</span><strong>{formatPrice(subtotal, currency, exchangeRate)}</strong></div><div className="summary-line summary-muted"><span>Shipping</span><span>Calculated at checkout</span></div><div className="summary-total"><span>Subtotal</span><strong>{formatPrice(subtotal, currency, exchangeRate)}</strong></div><p className="summary-footnote">Shipping is complimentary over $150. Secure payment details are collected by Stripe.</p><button type="button" className="checkout-button" onClick={beginCheckout} disabled={checkoutPending} aria-busy={checkoutPending}>{checkoutPending ? <><CircleNotch className="checkout-spinner" size={17} /> Connecting securely</> : <>Continue to secure payment <ArrowRight size={17} /></>}</button><div className="checkout-security"><LockKey size={14} /><span>Secure payment through Stripe</span></div>{checkoutNotice && <p className="checkout-notice" role="status">{checkoutNotice}</p>}<a className="checkout-help-link" href="/contact" onClick={(event) => onNavigate(event, '/contact')}>Questions about your order? Contact us</a></aside></div> : <div className="cart-empty-state"><div className="empty-bag-mark"><ShoppingBag size={25} /></div><h2>Your next favorite is waiting.</h2><p>Your bag is empty, so there’s nothing to check out just yet.</p><a className="hero-cta" href="/shop" onClick={(event) => onNavigate(event, '/shop')}>Find a good thing <ArrowRight size={17} /></a></div>}
+      <div className="editorial-page-heading checkout-heading"><span className="overline">A FEW DETAILS, THEN YOU’RE THERE</span><h1 id="checkout-title">Review your<br /><em>good choices.</em></h1><p>Choose your preferred payment method. Payment and receipt details are securely handled.</p></div>
+      {cartProducts.length ? (
+        <div className="checkout-layout">
+          <section className="checkout-review" aria-label="Order items">
+            <h2>Your pieces <span>{cartCount}</span></h2>
+            {cartProducts.map((product) => (
+              <article className="checkout-review-item" key={product.id}>
+                <img src={imageUrl(product.image, 260)} alt="" />
+                <div>
+                  <strong>{product.name}</strong>
+                  <span>{product.detail}</span>
+                  <span>Qty {cartItems[product.id]}</span>
+                </div>
+                <b>{formatPrice(product.price * cartItems[product.id], currency, exchangeRate)}</b>
+              </article>
+            ))}
+            <a className="continue-shopping" href="/cart" onClick={(event) => onNavigate(event, '/cart')}>Edit your bag <ArrowRight size={15} /></a>
+          </section>
+
+          <aside className="order-summary checkout-summary">
+            <span className="overline">THE IMPORTANT DETAILS</span>
+            <h2>Order summary</h2>
+            <div className="summary-line"><span>Items · {cartCount} {cartCount === 1 ? 'piece' : 'pieces'}</span><strong>{formatPrice(subtotal, currency, exchangeRate)}</strong></div>
+            <div className="summary-line summary-muted"><span>Shipping</span><span>{freeShipping ? 'Complimentary' : formatPrice(15, currency, exchangeRate)}</span></div>
+            <div className="summary-total"><span>Total</span><strong>{formatPrice(finalTotalUsd, currency, exchangeRate)}</strong></div>
+
+            <form onSubmit={handleCheckout} style={{ marginTop: '20px' }}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px', fontWeight: 600 }}>Payment Gateway</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('paystack')}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      padding: '10px 8px',
+                      border: paymentMethod === 'paystack' ? '2px solid #8b4513' : '1px solid rgba(0,0,0,0.12)',
+                      borderRadius: '6px',
+                      background: paymentMethod === 'paystack' ? '#fff' : '#faf8f5',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <PaystackLogo className="h-4 w-auto" />
+                    <span style={{ fontSize: '11px', fontWeight: paymentMethod === 'paystack' ? 700 : 500 }}>Cards / Bank / QR</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('stripe')}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      padding: '10px 8px',
+                      border: paymentMethod === 'stripe' ? '2px solid #8b4513' : '1px solid rgba(0,0,0,0.12)',
+                      borderRadius: '6px',
+                      background: paymentMethod === 'stripe' ? '#fff' : '#faf8f5',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span style={{ fontWeight: 800, fontSize: '14px', color: '#635bff' }}>stripe</span>
+                    <span style={{ fontSize: '11px', fontWeight: paymentMethod === 'stripe' ? 700 : 500 }}>Global Cards</span>
+                  </button>
+                </div>
+              </div>
+
+              {paymentMethod === 'paystack' && (
+                <div style={{ marginBottom: '16px' }}>
+                  <label htmlFor="paystack-email" style={{ display: 'block', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>Email Address *</label>
+                  <input
+                    id="paystack-email"
+                    type="email"
+                    required
+                    placeholder="you@example.com"
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(0,0,0,0.15)', borderRadius: '4px', marginBottom: '8px', fontSize: '14px', background: '#fff' }}
+                  />
+                  <label htmlFor="paystack-name" style={{ display: 'block', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>Full Name</label>
+                  <input
+                    id="paystack-name"
+                    type="text"
+                    placeholder="Your name"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(0,0,0,0.15)', borderRadius: '4px', fontSize: '14px', background: '#fff' }}
+                  />
+                </div>
+              )}
+
+              <p className="summary-footnote">
+                {paymentMethod === 'paystack'
+                  ? 'Processed securely via Paystack PCI-DSS Level 1 terminal. Supports Cards, Bank Transfer, Apple Pay, & USSD.'
+                  : 'Shipping is complimentary over $150. Secure payment details are collected by Stripe.'}
+              </p>
+
+              <button type="submit" className="checkout-button" disabled={checkoutPending} aria-busy={checkoutPending}>
+                {checkoutPending ? (
+                  <><CircleNotch className="checkout-spinner" size={17} /> Connecting securely</>
+                ) : (
+                  <>Continue with {paymentMethod === 'paystack' ? 'Paystack' : 'Stripe'} <ArrowRight size={17} /></>
+                )}
+              </button>
+            </form>
+
+            <div className="checkout-security"><LockKey size={14} /><span>PCI-DSS 256-bit Encrypted Checkout</span></div>
+            {checkoutNotice && <p className="checkout-notice" role="status">{checkoutNotice}</p>}
+            <a className="checkout-help-link" href="/contact" onClick={(event) => onNavigate(event, '/contact')}>Questions about your order? Contact us</a>
+          </aside>
+        </div>
+      ) : (
+        <div className="cart-empty-state"><div className="empty-bag-mark"><ShoppingBag size={25} /></div><h2>Your next favorite is waiting.</h2><p>Your bag is empty, so there’s nothing to check out just yet.</p><a className="hero-cta" href="/shop" onClick={(event) => onNavigate(event, '/shop')}>Find a good thing <ArrowRight size={17} /></a></div>
+      )}
     </motion.section>
   )
 }
@@ -832,7 +1037,12 @@ function App() {
     if (!isCheckoutSuccess || !checkoutSessionId) return
 
     let active = true
-    fetch(`/api/checkout_sessions/${encodeURIComponent(checkoutSessionId)}`)
+    const isPaystack = new URLSearchParams(window.location.search).get('paystack') === 'true'
+    const verifyEndpoint = isPaystack
+      ? `/api/paystack/verify/${encodeURIComponent(checkoutSessionId)}`
+      : `/api/checkout_sessions/${encodeURIComponent(checkoutSessionId)}`
+
+    fetch(verifyEndpoint)
       .then(async (response) => {
         const result = await response.json()
         if (!response.ok) throw new Error(result.error || 'Payment status could not be verified.')

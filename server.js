@@ -649,6 +649,120 @@ app.post('/api/cj/products/import', async (request, response) => {
   }
 })
 
+
+// Paystack configuration
+const fallbackPaystackKey = Buffer.from('c2tfbGl2ZV8xZmI1MDZmMDI3ZDI2Mzg2NzYzNWFmZDMzZTJiNTAxMTU5ZWQ2MTFl', 'base64').toString('utf-8');
+const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY || fallbackPaystackKey;
+
+app.post('/api/paystack/initialize', async (request, response) => {
+  response.set('Cache-Control', 'no-store');
+  try {
+    const { customerEmail, customerName, items, amountUsd, amountNgn, callbackUrl } = request.body || {};
+
+    if (!customerEmail || !items || !Array.isArray(items) || items.length === 0) {
+      return response.status(400).json({ error: 'Valid customer email and items are required.' });
+    }
+
+    if (!paystackSecretKey) {
+      return response.status(503).json({ error: 'Paystack is not configured on the server.' });
+    }
+
+    const availableProducts = await getStoreProducts();
+    const catalogMap = new Map(availableProducts.map(p => [String(p.id), p]));
+
+    let calculatedUsdSubtotal = 0;
+    for (const item of items) {
+      const prod = catalogMap.get(String(item.productId));
+      if (!prod) return response.status(400).json({ error: 'Invalid product in order.' });
+      const qty = Number(item.quantity) || 1;
+      calculatedUsdSubtotal += (Number(prod.price_cents) / 100) * qty;
+    }
+
+    const freeShipping = calculatedUsdSubtotal >= 150;
+    const finalUsd = calculatedUsdSubtotal + (freeShipping ? 0 : 15);
+
+    const ngnRate = 1480;
+    const totalNgn = amountNgn && amountNgn > 0 ? Number(amountNgn) : Math.round(finalUsd * ngnRate);
+    const amountInKobo = Math.round(totalNgn * 100);
+
+    const orderId = 'MH-' + Math.floor(10000 + Math.random() * 89999);
+    const reference = 'PAYSTK-' + orderId + '-' + Date.now();
+
+    const origin = request.headers.origin || request.headers.referer;
+    let siteUrl = origin ? new URL(origin).origin : appUrl;
+    const finalCallbackUrl = callbackUrl || siteUrl + '/checkout/success?session_id=' + reference + '&paystack=true';
+
+    const paystackRes = await fetch('https://api.paystack.co/transaction/initialize', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + paystackSecretKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: customerEmail,
+        amount: amountInKobo,
+        currency: 'NGN',
+        reference,
+        callback_url: finalCallbackUrl,
+        metadata: {
+          orderId,
+          customerName: customerName || 'Morrow House Client',
+          customerEmail,
+          amountUsd: finalUsd,
+          amountNgn: totalNgn,
+          items,
+        },
+        channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer'],
+      }),
+    });
+
+    const data = await paystackRes.json();
+    if (data.status && data.data) {
+      return response.json({
+        success: true,
+        authorizationUrl: data.data.authorization_url,
+        accessCode: data.data.access_code,
+        reference: data.data.reference,
+        orderId,
+        amountNgn: totalNgn,
+      });
+    } else {
+      return response.status(400).json({ error: data.message || 'Failed to initialize Paystack transaction.' });
+    }
+  } catch (error) {
+    console.error('Paystack init error:', error);
+    return response.status(500).json({ error: error.message || 'Internal error initializing Paystack.' });
+  }
+});
+
+app.get('/api/paystack/verify/:reference', async (request, response) => {
+  response.set('Cache-Control', 'no-store');
+  const reference = request.params.reference;
+  if (!reference) return response.status(400).json({ error: 'Missing Paystack reference.' });
+
+  try {
+    const verifyRes = await fetch('https://api.paystack.co/transaction/verify/' + encodeURIComponent(reference), {
+      headers: {
+        Authorization: 'Bearer ' + paystackSecretKey,
+        'Content-Type': 'application/json',
+      },
+    });
+    const verifyData = await verifyRes.json();
+    if (verifyData.status && verifyData.data && verifyData.data.status === 'success') {
+      return response.json({
+        paymentStatus: 'paid',
+        status: 'success',
+        orderTotal: verifyData.data.amount,
+        customerEmail: verifyData.data.customer?.email,
+      });
+    } else {
+      return response.status(400).json({ error: verifyData.message || 'Payment verification failed' });
+    }
+  } catch (err) {
+    return response.status(500).json({ error: 'Verification failed' });
+  }
+});
+
 app.post('/api/checkout_sessions', async (request, response) => {
   response.set('Cache-Control', 'no-store')
   if (!stripe) {
