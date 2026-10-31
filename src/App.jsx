@@ -620,7 +620,7 @@ function CheckoutPage({ cartProducts, cartItems, cartCount, subtotal, onNavigate
 
       const win = window
       const isMobile = typeof navigator !== 'undefined' && /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent)
-      const paystackPublicKey = 'pk_live_d2e4bb883f45096a034c3ed24d0ef6565d1a5484'
+      const paystackPublicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || 'pk_live_d2e4bb883f45096a034c3ed24d0ef6565d1a5484'
 
       if (!isMobile && win.PaystackPop && typeof win.PaystackPop.setup === 'function') {
         try {
