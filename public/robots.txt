@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /checkout
+Disallow: /checkout/success
+Disallow: /track-order
+
+Sitemap: https://morrowhouse.vercel.app/sitemap.xml

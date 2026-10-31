@@ -937,6 +937,44 @@ function App() {
       '/terms': 'Terms & conditions',
       }[currentPath] || currentProduct?.name || 'Page not found')} | Morrow House`
     document.title = pageTitle
+
+    // Dynamic SEO metadata & JSON-LD updates
+    let metaDesc = document.querySelector('meta[name="description"]')
+    if (!metaDesc) {
+      metaDesc = document.createElement('meta')
+      metaDesc.name = 'description'
+      document.head.appendChild(metaDesc)
+    }
+
+    let productJsonLd = document.getElementById('product-schema-jsonld')
+    if (currentProduct) {
+      metaDesc.content = `${currentProduct.name} - ${currentProduct.detail} | Morrow House`
+      const schemaData = {
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        name: currentProduct.name,
+        image: `https://images.unsplash.com/${currentProduct.image}?auto=format&fit=crop&w=1000&q=85`,
+        description: currentProduct.detail,
+        category: currentProduct.category,
+        offers: {
+          '@type': 'Offer',
+          priceCurrency: 'USD',
+          price: currentProduct.price,
+          availability: 'https://schema.org/InStock',
+          url: window.location.href,
+        },
+      }
+      if (!productJsonLd) {
+        productJsonLd = document.createElement('script')
+        productJsonLd.id = 'product-schema-jsonld'
+        productJsonLd.type = 'application/ld+json'
+        document.head.appendChild(productJsonLd)
+      }
+      productJsonLd.text = JSON.stringify(schemaData)
+    } else {
+      metaDesc.content = 'Considered objects for the rituals, rooms, and very good nights in that make a place yours. Shop Morrow House.'
+      if (productJsonLd) productJsonLd.remove()
+    }
   }, [currentPath, currentProduct?.name])
 
   useEffect(() => {
