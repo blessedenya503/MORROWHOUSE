@@ -431,15 +431,28 @@ app.get('/api/exchange-rates', async (_request, response) => {
   }
 })
 
+const fallbackProducts = [
+  { id: 'lune-chair', name: 'Lune Lounge Chair', category: 'Living', price_cents: 89000, stock: 7, image: 'photo-1567538096630-e0c55bd6374c', is_active: true, detail: 'Sculptural lounge chair in textured oat bouclé with solid smoked oak frame.' },
+  { id: 'sora-lamp', name: 'Sora Table Lamp', category: 'Lighting', price_cents: 24500, stock: 3, image: 'photo-1507473885765-e6ed057f782c', is_active: true, detail: 'Hand-cast ceramic lamp with a warm diffused linen shade.' },
+  { id: 'form-vase', name: 'Form No. 02 Vessel', category: 'Objects', price_cents: 11800, stock: 2, image: 'photo-1578500494198-246f612d3b3d', is_active: true, detail: 'Unglazed stoneware vessel designed for botanical stems or quiet display.' },
+  { id: 'cloud-throw', name: 'Cloud Weave Throw', category: 'Living', price_cents: 19500, stock: 14, image: 'photo-1600210491892-03d54c0aaf87', is_active: true, detail: 'Woven virgin wool throw with subtle fringed border in chalk white.' },
+]
+
 async function getStoreProducts() {
-  if (!supabase) throw new Error('Supabase is not configured on the server.')
-  const { data, error } = await supabase
-    .from('products')
-    .select('id,name,category,price_cents,stock,image,is_active')
-    .eq('is_active', true)
-    .order('name', { ascending: true })
-  if (error) throw error
-  return data || []
+  if (!supabase) return fallbackProducts
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select('id,name,category,price_cents,stock,image,is_active')
+      .eq('is_active', true)
+      .order('name', { ascending: true })
+    if (error) throw error
+    if (data && data.length > 0) return data
+    return fallbackProducts
+  } catch (err) {
+    console.warn('Supabase products fetch failed, using fallback catalog:', err.message || err)
+    return fallbackProducts
+  }
 }
 
 app.get('/api/products', async (_request, response) => {
@@ -746,9 +759,12 @@ if (process.env.NODE_ENV === 'production') {
   })
 }
 
-app.listen(port, '0.0.0.0', () => {
-  console.log(`Morrow House API listening on http://localhost:${port}`)
-  if (!stripe) console.log('Stripe is not configured. Add STRIPE_SECRET_KEY to .env to enable payments.')
-})
+if (!process.env.VERCEL) {
+  app.listen(port, '0.0.0.0', () => {
+    console.log('Morrow House API listening on http://localhost:' + port)
+    if (!stripe) console.log('Stripe is not configured. Add STRIPE_SECRET_KEY to .env to enable payments.')
+  })
+}
 
 export { app }
+export default app
