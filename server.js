@@ -1,6 +1,5 @@
 import 'dotenv/config'
 import express from 'express'
-import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 import path from 'node:path'
 import { existsSync } from 'node:fs'
@@ -9,8 +8,6 @@ import { buildApprovedMorrowHouseProduct, buildCJOrderPayload, buildCJProductImp
 const app = express()
 const port = Number(process.env.PORT || 4242)
 const appUrl = (process.env.APP_URL || 'http://127.0.0.1:5173').replace(/\/+$/, '')
-const stripeKey = process.env.STRIPE_SECRET_KEY || ''
-const stripe = stripeKey.startsWith('sk_') ? new Stripe(stripeKey) : null
 const supabaseUrl = process.env.SUPABASE_URL || ''
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const supabase = supabaseUrl && supabaseServiceRoleKey
@@ -49,8 +46,7 @@ app.get('/api/health', (_request, response) => {
   response.json({
     status: 'ok',
     supabaseConfigured: Boolean(supabase),
-    stripeConfigured: Boolean(stripe),
-    designAssistantConfigured: Boolean(openAiKey),
+        designAssistantConfigured: Boolean(openAiKey),
     cjConfigured: cjConfig.configured,
   })
 })
@@ -763,106 +759,6 @@ app.get('/api/paystack/verify/:reference', async (request, response) => {
   }
 });
 
-app.post('/api/checkout_sessions', async (request, response) => {
-  response.set('Cache-Control', 'no-store')
-  if (!stripe) {
-    return response.status(503).json({ error: 'Secure checkout is not configured yet. Add a Stripe secret key to the local environment.' })
-  }
-
-  const requestedItems = request.body?.items
-  if (!Array.isArray(requestedItems) || requestedItems.length === 0 || requestedItems.length > 50) {
-    return response.status(400).json({ error: 'Your bag is empty or could not be read. Please return to your bag and try again.' })
-  }
-
-  const checkoutProducts = new Map()
-  try {
-    for (const product of await getStoreProducts()) {
-      checkoutProducts.set(String(product.id), {
-        name: product.name,
-        description: `${product.category} · thoughtfully chosen`,
-        price: Number(product.price_cents),
-        image: product.image || 'photo-1524758631624-e2822e304c36',
-      })
-    }
-  } catch {
-    return response.status(503).json({ error: 'The shop catalog could not be loaded for checkout. Please try again shortly.' })
-  }
-
-  const seenIds = new Set()
-  const lineItems = []
-  let subtotal = 0
-
-  for (const item of requestedItems) {
-    const product = checkoutProducts.get(item?.productId)
-    const quantity = item?.quantity
-    if (!product || !Number.isInteger(quantity) || quantity < 1 || quantity > 10 || seenIds.has(item.productId)) {
-      return response.status(400).json({ error: 'One or more items in your bag are invalid. Please refresh your bag and try again.' })
-    }
-    seenIds.add(item.productId)
-    subtotal += product.price * quantity
-    lineItems.push({
-      quantity,
-      price_data: {
-        currency: 'usd',
-        unit_amount: product.price,
-        product_data: {
-          name: product.name,
-          description: product.description,
-          images: [`https://images.unsplash.com/${product.image}?auto=format&fit=crop&w=900&q=85`],
-        },
-      },
-    })
-  }
-
-  try {
-    const freeShipping = subtotal >= shippingThreshold
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      payment_method_types: ['card'],
-      line_items: lineItems,
-      billing_address_collection: 'auto',
-      shipping_address_collection: { allowed_countries: ['US', 'CA'] },
-      phone_number_collection: { enabled: true },
-      shipping_options: [
-        {
-          shipping_rate_data: {
-            type: 'fixed_amount',
-            fixed_amount: { amount: freeShipping ? 0 : 1500, currency: 'usd' },
-            display_name: freeShipping ? 'Complimentary shipping' : 'Ground shipping',
-            delivery_estimate: {
-              minimum: { unit: 'business_day', value: 4 },
-              maximum: { unit: 'business_day', value: 7 },
-            },
-          },
-        },
-      ],
-      success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}/cart?payment=cancelled`,
-    })
-
-    response.json({ url: session.url })
-  } catch {
-    response.status(502).json({ error: 'Stripe could not start checkout. Please try again or contact the shop.' })
-  }
-})
-
-app.get('/api/checkout_sessions/:sessionId', async (request, response) => {
-  response.set('Cache-Control', 'no-store')
-  if (!stripe) {
-    return response.status(503).json({ error: 'Payment verification is not configured.' })
-  }
-  if (!/^cs_(test|live)_[A-Za-z0-9]+$/.test(request.params.sessionId)) {
-    return response.status(400).json({ error: 'Invalid checkout session.' })
-  }
-
-  try {
-    const session = await stripe.checkout.sessions.retrieve(request.params.sessionId)
-    response.json({ paymentStatus: session.payment_status })
-  } catch {
-    response.status(404).json({ error: 'We could not verify this checkout session.' })
-  }
-})
-
 if (process.env.NODE_ENV === 'production') {
   const indexFile = path.join(root, 'dist', 'index.html')
   app.use(express.static(path.join(root, 'dist')))
@@ -876,8 +772,7 @@ if (process.env.NODE_ENV === 'production') {
 if (!process.env.VERCEL) {
   app.listen(port, '0.0.0.0', () => {
     console.log('Morrow House API listening on http://localhost:' + port)
-    if (!stripe) console.log('Stripe is not configured. Add STRIPE_SECRET_KEY to .env to enable payments.')
-  })
+      })
 }
 
 export { app }
