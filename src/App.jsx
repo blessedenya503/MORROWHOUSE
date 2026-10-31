@@ -301,9 +301,9 @@ function CartPage({ cartProducts, cartItems, cartCount, subtotal, changeQuantity
             <div className="summary-line"><span>Items · {cartCount} {cartCount === 1 ? 'piece' : 'pieces'}</span><strong>{formatPrice(subtotal, currency, exchangeRate)}</strong></div>
             <div className="summary-line summary-muted"><span>Shipping</span><span>Calculated at checkout</span></div>
             <div className="summary-total"><span>Subtotal</span><strong>{formatPrice(subtotal, currency, exchangeRate)}</strong></div>
-            <p className="summary-footnote">Delivery options and the final total are confirmed by Stripe before payment.</p>
+            <p className="summary-footnote">Complimentary shipping over $150. Payment is safely processed with Paystack.</p>
             <a className="checkout-button" href="/checkout" onClick={(event) => onNavigate(event, '/checkout')}>Review order <ArrowRight size={17} /></a>
-            <div className="checkout-security"><LockKey size={14} /><span>Secure payment through Stripe</span></div>
+            <div className="checkout-security"><LockKey size={14} /><span>Secure checkout powered by Paystack</span></div>
             {checkoutNotice && <p className="checkout-notice" role="status" aria-live="polite">{checkoutNotice}</p>}
             <div className="summary-assurance"><span>30 days to make yourself at home</span><span>Thoughtfully packed, always</span></div>
           </aside>
@@ -331,7 +331,7 @@ function CheckoutSuccess({ status, error, sessionId, onNavigate }) {
       </div>
       <span className="overline">{isPaid ? 'PAYMENT CONFIRMED' : isChecking ? 'ONE MOMENT' : 'PAYMENT STATUS'}</span>
       <h1 id="payment-return-title">{isPaid ? <>Good things<br /><em>are on their way.</em></> : isChecking ? 'Confirming your payment.' : 'We couldn’t confirm that payment.'}</h1>
-      <p>{isPaid ? 'Stripe has confirmed your payment. Keep your Stripe receipt for your records.' : isChecking ? 'We’re securely checking the payment status with Stripe.' : error || 'Your bag is still saved. Check your payment status with Stripe before trying again.'}</p>
+      <p>{isPaid ? 'Paystack has confirmed your payment. Keep your payment reference for your records.' : isChecking ? 'We’re securely verifying your payment with Paystack.' : error || 'Your bag is still saved. Check your payment status before trying again.'}</p>
       <div className="payment-return-actions">
         <a className="hero-cta" href="/shop" onClick={(event) => onNavigate(event, '/shop')}>Back to the shop <ArrowRight size={17} /></a>
         {isPaid && <a className="text-link" href={`/track-order?session_id=${encodeURIComponent(sessionId || '')}`} onClick={(event) => onNavigate(event, `/track-order?session_id=${encodeURIComponent(sessionId || '')}`)}>Track your order <ArrowRight size={15} /></a>}
@@ -581,33 +581,14 @@ function CheckoutPage({ cartProducts, cartItems, cartCount, subtotal, onNavigate
   const { currency, exchangeRate, rates } = useCurrency()
   const [checkoutPending, setCheckoutPending] = useState(false)
   const [checkoutNotice, setCheckoutNotice] = useState('')
-  const [paymentMethod, setPaymentMethod] = useState('paystack')
   const [customerEmail, setCustomerEmail] = useState('')
   const [customerName, setCustomerName] = useState('')
 
   const freeShipping = subtotal >= 150
   const finalTotalUsd = subtotal + (freeShipping ? 0 : 15)
 
-  async function beginStripeCheckout() {
-    setCheckoutPending(true)
-    setCheckoutNotice('')
-    try {
-      const response = await fetch('/api/checkout_sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: cartProducts.map((product) => ({ productId: product.id, quantity: cartItems[product.id] })) }),
-      })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || 'Checkout could not be started.')
-      if (new URL(result.url).hostname !== 'checkout.stripe.com') throw new Error('Stripe returned an unexpected checkout address.')
-      window.location.assign(result.url)
-    } catch (error) {
-      setCheckoutNotice(error instanceof Error ? error.message : 'Checkout could not be started. Please try again.')
-      setCheckoutPending(false)
-    }
-  }
-
-  async function beginPaystackCheckout() {
+  async function handlePaystackCheckout(e) {
+    e.preventDefault()
     if (!customerEmail.trim() || !customerEmail.includes('@')) {
       setCheckoutNotice('Please enter a valid email address to receive your order receipt.')
       return
@@ -679,19 +660,10 @@ function CheckoutPage({ cartProducts, cartItems, cartCount, subtotal, onNavigate
     }
   }
 
-  function handleCheckout(e) {
-    e.preventDefault()
-    if (paymentMethod === 'stripe') {
-      beginStripeCheckout()
-    } else {
-      beginPaystackCheckout()
-    }
-  }
-
   return (
     <motion.section className="checkout-page section-wrap" aria-labelledby="checkout-title" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
       <nav className="cart-breadcrumb" aria-label="Breadcrumb"><a href="/" onClick={(event) => onNavigate(event, '/')}>Home</a><span>/</span><a href="/cart" onClick={(event) => onNavigate(event, '/cart')}>Your bag</a><span>/</span><span aria-current="page">Checkout</span></nav>
-      <div className="editorial-page-heading checkout-heading"><span className="overline">A FEW DETAILS, THEN YOU’RE THERE</span><h1 id="checkout-title">Review your<br /><em>good choices.</em></h1><p>Choose your preferred payment method. Payment and receipt details are securely handled.</p></div>
+      <div className="editorial-page-heading checkout-heading"><span className="overline">A FEW DETAILS, THEN YOU’RE THERE</span><h1 id="checkout-title">Review your<br /><em>good choices.</em></h1><p>Your payment is processed securely with Paystack PCI-DSS encrypted checkout.</p></div>
       {cartProducts.length ? (
         <div className="checkout-layout">
           <section className="checkout-review" aria-label="Order items">
@@ -717,87 +689,39 @@ function CheckoutPage({ cartProducts, cartItems, cartCount, subtotal, onNavigate
             <div className="summary-line summary-muted"><span>Shipping</span><span>{freeShipping ? 'Complimentary' : formatPrice(15, currency, exchangeRate)}</span></div>
             <div className="summary-total"><span>Total</span><strong>{formatPrice(finalTotalUsd, currency, exchangeRate)}</strong></div>
 
-            <form onSubmit={handleCheckout} style={{ marginTop: '20px' }}>
+            <form onSubmit={handlePaystackCheckout} style={{ marginTop: '20px' }}>
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px', fontWeight: 600 }}>Payment Gateway</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('paystack')}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      padding: '10px 8px',
-                      border: paymentMethod === 'paystack' ? '2px solid #8b4513' : '1px solid rgba(0,0,0,0.12)',
-                      borderRadius: '6px',
-                      background: paymentMethod === 'paystack' ? '#fff' : '#faf8f5',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <PaystackLogo className="h-4 w-auto" />
-                    <span style={{ fontSize: '11px', fontWeight: paymentMethod === 'paystack' ? 700 : 500 }}>Cards / Bank / QR</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('stripe')}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      padding: '10px 8px',
-                      border: paymentMethod === 'stripe' ? '2px solid #8b4513' : '1px solid rgba(0,0,0,0.12)',
-                      borderRadius: '6px',
-                      background: paymentMethod === 'stripe' ? '#fff' : '#faf8f5',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <span style={{ fontWeight: 800, fontSize: '14px', color: '#635bff' }}>stripe</span>
-                    <span style={{ fontSize: '11px', fontWeight: paymentMethod === 'stripe' ? 700 : 500 }}>Global Cards</span>
-                  </button>
-                </div>
+                <label htmlFor="paystack-email" style={{ display: 'block', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>Email Address *</label>
+                <input
+                  id="paystack-email"
+                  type="email"
+                  required
+                  placeholder="you@example.com"
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(0,0,0,0.15)', borderRadius: '4px', marginBottom: '8px', fontSize: '14px', background: '#fff' }}
+                />
+                <label htmlFor="paystack-name" style={{ display: 'block', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>Full Name</label>
+                <input
+                  id="paystack-name"
+                  type="text"
+                  placeholder="Your name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(0,0,0,0.15)', borderRadius: '4px', fontSize: '14px', background: '#fff' }}
+                />
               </div>
 
-              {paymentMethod === 'paystack' && (
-                <div style={{ marginBottom: '16px' }}>
-                  <label htmlFor="paystack-email" style={{ display: 'block', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>Email Address *</label>
-                  <input
-                    id="paystack-email"
-                    type="email"
-                    required
-                    placeholder="you@example.com"
-                    value={customerEmail}
-                    onChange={(e) => setCustomerEmail(e.target.value)}
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(0,0,0,0.15)', borderRadius: '4px', marginBottom: '8px', fontSize: '14px', background: '#fff' }}
-                  />
-                  <label htmlFor="paystack-name" style={{ display: 'block', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>Full Name</label>
-                  <input
-                    id="paystack-name"
-                    type="text"
-                    placeholder="Your name"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(0,0,0,0.15)', borderRadius: '4px', fontSize: '14px', background: '#fff' }}
-                  />
-                </div>
-              )}
-
-              <p className="summary-footnote">
-                {paymentMethod === 'paystack'
-                  ? 'Processed securely via Paystack PCI-DSS Level 1 terminal. Supports Cards, Bank Transfer, Apple Pay, & USSD.'
-                  : 'Shipping is complimentary over $150. Secure payment details are collected by Stripe.'}
-              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', padding: '8px 10px', background: '#f5f5f3', borderRadius: '4px' }}>
+                <PaystackLogo className="h-4 w-auto" />
+                <span style={{ fontSize: '12px', color: '#555' }}>Supports Cards, Bank Transfer, Apple Pay, & USSD</span>
+              </div>
 
               <button type="submit" className="checkout-button" disabled={checkoutPending} aria-busy={checkoutPending}>
                 {checkoutPending ? (
                   <><CircleNotch className="checkout-spinner" size={17} /> Connecting securely</>
                 ) : (
-                  <>Continue with {paymentMethod === 'paystack' ? 'Paystack' : 'Stripe'} <ArrowRight size={17} /></>
+                  <>Pay with Paystack <ArrowRight size={17} /></>
                 )}
               </button>
             </form>
@@ -838,7 +762,7 @@ function TrackOrderPage({ onNavigate }) {
     }
   }
 
-  return <motion.section className="track-page section-wrap" aria-labelledby="track-title" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}><nav className="cart-breadcrumb" aria-label="Breadcrumb"><a href="/" onClick={(event) => onNavigate(event, '/')}>Home</a><span>/</span><span aria-current="page">Track order</span></nav><div className="editorial-page-heading"><span className="overline">A LITTLE UPDATE ON THE WAY</span><h1 id="track-title">Where’s your<br /><em>order now?</em></h1><p>Enter the Stripe checkout reference from your confirmation page or receipt and the email used at checkout.</p></div><form className="track-order-form" onSubmit={handleSubmit}><label htmlFor="order-reference">Checkout reference</label><div><input id="order-reference" value={orderReference} onChange={(event) => setOrderReference(event.target.value)} placeholder="cs_test_…" required /><label htmlFor="receipt-email">Receipt email</label><input id="receipt-email" type="email" autoComplete="email" value={receiptEmail} onChange={(event) => setReceiptEmail(event.target.value)} placeholder="you@example.com" required /><button type="submit" className="checkout-button" disabled={isChecking}>{isChecking ? 'Checking…' : <>Find my order <ArrowRight size={16} /></>}</button></div></form>{error && <p className="checkout-notice track-notice" role="alert">{error}</p>}{order && <section className="track-result" aria-live="polite"><span className="overline">ORDER LOOKUP</span><h2>{order.paymentStatus === 'paid' ? 'Payment confirmed.' : 'Payment is not complete yet.'}</h2><p>{order.paymentStatus === 'paid' ? 'Your order is confirmed with Stripe.' : 'Stripe has not marked this payment as complete.'}</p>{order.orderTotal != null && <div className="summary-line"><span>Order total</span><strong>{formatPrice(order.orderTotal / 100)}</strong></div>}{order.customerEmail && <div className="summary-line"><span>Receipt sent to</span><strong>{order.customerEmail}</strong></div>}<div className="tracking-limit"><strong>Carrier updates</strong><p>Live shipment scans are not connected yet. Your shipping carrier and tracking number will be shared with you by email once the order is fulfilled.</p></div></section>}<p className="track-help">Need a hand? <a href="/contact" onClick={(event) => onNavigate(event, '/contact')}>Contact us <ArrowRight size={14} /></a></p></motion.section>
+  return <motion.section className="track-page section-wrap" aria-labelledby="track-title" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}><nav className="cart-breadcrumb" aria-label="Breadcrumb"><a href="/" onClick={(event) => onNavigate(event, '/')}>Home</a><span>/</span><span aria-current="page">Track order</span></nav><div className="editorial-page-heading"><span className="overline">A LITTLE UPDATE ON THE WAY</span><h1 id="track-title">Where’s your<br /><em>order now?</em></h1><p>Enter the Paystack checkout reference from your confirmation page or receipt and the email used at checkout.</p></div><form className="track-order-form" onSubmit={handleSubmit}><label htmlFor="order-reference">Checkout reference</label><div><input id="order-reference" value={orderReference} onChange={(event) => setOrderReference(event.target.value)} placeholder="cs_test_…" required /><label htmlFor="receipt-email">Receipt email</label><input id="receipt-email" type="email" autoComplete="email" value={receiptEmail} onChange={(event) => setReceiptEmail(event.target.value)} placeholder="you@example.com" required /><button type="submit" className="checkout-button" disabled={isChecking}>{isChecking ? 'Checking…' : <>Find my order <ArrowRight size={16} /></>}</button></div></form>{error && <p className="checkout-notice track-notice" role="alert">{error}</p>}{order && <section className="track-result" aria-live="polite"><span className="overline">ORDER LOOKUP</span><h2>{order.paymentStatus === 'paid' ? 'Payment confirmed.' : 'Payment is not complete yet.'}</h2><p>{order.paymentStatus === 'paid' ? 'Your order is confirmed with Paystack.' : 'Paystack has not marked this payment as complete.'}</p>{order.orderTotal != null && <div className="summary-line"><span>Order total</span><strong>{formatPrice(order.orderTotal / 100)}</strong></div>}{order.customerEmail && <div className="summary-line"><span>Receipt sent to</span><strong>{order.customerEmail}</strong></div>}<div className="tracking-limit"><strong>Carrier updates</strong><p>Live shipment scans are not connected yet. Your shipping carrier and tracking number will be shared with you by email once the order is fulfilled.</p></div></section>}<p className="track-help">Need a hand? <a href="/contact" onClick={(event) => onNavigate(event, '/contact')}>Contact us <ArrowRight size={14} /></a></p></motion.section>
 }
 
 function ContactPage({ onNavigate }) {
@@ -847,9 +771,9 @@ function ContactPage({ onNavigate }) {
 
 const policyPages = {
   '/refunds': { title: <>A little time to<br /><em>make yourself at home.</em></>, eyebrow: 'REFUND & RETURN POLICY', updated: 'Our 30-day return window begins on the day your order is delivered.', sections: [['Start a return', 'Contact us within 30 days of delivery with your order reference and the item you would like to return. We will reply with return instructions before you send anything back.'], ['Condition of returned pieces', 'Please return pieces unused and in their original packaging. Items that arrive damaged or are incorrect should be reported to us as soon as possible, with photos if available.'], ['Refunds', 'Once a return is received and reviewed, approved refunds are sent to the original payment method. Your bank or card provider may take additional time to post the refund.'], ['Shipping costs', 'Original shipping charges are not refundable unless the return is due to an error on our part. We will confirm any return-shipping costs and instructions before a return is sent.']] },
-  '/shipping': { title: <>Good things,<br /><em>on their way.</em></>, eyebrow: 'SHIPPING POLICY', updated: 'We currently ship to the United States and Canada.', sections: [['Rates', 'Ground shipping is $15 for orders under $150. Orders of $150 or more ship complimentary. The final shipping cost is shown by Stripe before you pay.'], ['Delivery timing', 'Ground orders are estimated to arrive in 4–7 business days after they ship. This is an estimate, not a guaranteed delivery date; carrier or weather delays may add time.'], ['Order updates', 'Stripe emails your receipt after payment. Carrier tracking details are not yet connected to this storefront; we will share them by email when available.'], ['Need help?', 'If your order has not arrived as expected, contact us with your checkout reference so we can look into it.']] },
-  '/privacy': { title: <>Your details,<br /><em>treated with care.</em></>, eyebrow: 'PRIVACY POLICY', updated: 'This storefront collects only the information needed to support shopping and checkout.', sections: [['Shopping and cart', 'Your bag is saved in this browser’s local storage so it is still here when you return. This data is stored on your device.'], ['Payments', 'Payment details are collected and processed by Stripe Checkout. This storefront does not receive or store your full card number. Stripe’s privacy policy also applies to checkout.'], ['Order lookups', 'When you submit a Stripe checkout reference on the tracking page, it is sent to our server to retrieve the payment status and limited receipt information from Stripe.'], ['Design assistant', 'If live AI is enabled, the question you submit to the Design Enthusiast is sent to OpenAI to generate a reply. Do not include sensitive personal details. When live AI is unavailable, answers use the local product guide.'], ['Your choices', 'You can clear your saved bag by removing its items or clearing this site’s browser storage. For questions about order information, contact us with your checkout reference.']] },
-  '/terms': { title: <>The simple things<br /><em>we agree on.</em></>, eyebrow: 'TERMS & CONDITIONS', updated: 'By using this storefront, you agree to these terms.', sections: [['Products and prices', 'We aim to keep product descriptions, availability, and prices accurate. Prices are shown in US dollars. An order is not accepted until payment has been confirmed by Stripe.'], ['Orders and payment', 'Checkout is provided by Stripe. We may be unable to fulfill an order if an item is unavailable or an order cannot be verified; if payment has been taken, we will arrange a refund.'], ['Shipping and returns', 'Shipping destinations, rates, estimates, and return terms are described in our Shipping and Refund & Return policies. Those pages form part of these terms.'], ['Use of this site', 'Please use the storefront lawfully and do not interfere with its operation, attempt unauthorized access, or submit information that is unlawful or harmful.'], ['Questions', 'Contact us if you have a question about these terms or an order. These terms should be reviewed for your local consumer-protection requirements before the store is used for real sales.']] },
+  '/shipping': { title: <>Good things,<br /><em>on their way.</em></>, eyebrow: 'SHIPPING POLICY', updated: 'We currently ship to the United States and Canada.', sections: [['Rates', 'Ground shipping is $15 for orders under $150. Orders of $150 or more ship complimentary. The final shipping cost is shown by Paystack before you pay.'], ['Delivery timing', 'Ground orders are estimated to arrive in 4–7 business days after they ship. This is an estimate, not a guaranteed delivery date; carrier or weather delays may add time.'], ['Order updates', 'Paystack emails your receipt after payment. Carrier tracking details are not yet connected to this storefront; we will share them by email when available.'], ['Need help?', 'If your order has not arrived as expected, contact us with your checkout reference so we can look into it.']] },
+  '/privacy': { title: <>Your details,<br /><em>treated with care.</em></>, eyebrow: 'PRIVACY POLICY', updated: 'This storefront collects only the information needed to support shopping and checkout.', sections: [['Shopping and cart', 'Your bag is saved in this browser’s local storage so it is still here when you return. This data is stored on your device.'], ['Payments', 'Payment details are collected and processed by Paystack Checkout. This storefront does not receive or store your full card number. Paystack’s privacy policy also applies to checkout.'], ['Order lookups', 'When you submit a Paystack checkout reference on the tracking page, it is sent to our server to retrieve the payment status and limited receipt information from Paystack.'], ['Design assistant', 'If live AI is enabled, the question you submit to the Design Enthusiast is sent to OpenAI to generate a reply. Do not include sensitive personal details. When live AI is unavailable, answers use the local product guide.'], ['Your choices', 'You can clear your saved bag by removing its items or clearing this site’s browser storage. For questions about order information, contact us with your checkout reference.']] },
+  '/terms': { title: <>The simple things<br /><em>we agree on.</em></>, eyebrow: 'TERMS & CONDITIONS', updated: 'By using this storefront, you agree to these terms.', sections: [['Products and prices', 'We aim to keep product descriptions, availability, and prices accurate. Prices are shown in US dollars. An order is not accepted until payment has been confirmed by Paystack.'], ['Orders and payment', 'Checkout is provided by Paystack. We may be unable to fulfill an order if an item is unavailable or an order cannot be verified; if payment has been taken, we will arrange a refund.'], ['Shipping and returns', 'Shipping destinations, rates, estimates, and return terms are described in our Shipping and Refund & Return policies. Those pages form part of these terms.'], ['Use of this site', 'Please use the storefront lawfully and do not interfere with its operation, attempt unauthorized access, or submit information that is unlawful or harmful.'], ['Questions', 'Contact us if you have a question about these terms or an order. These terms should be reviewed for your local consumer-protection requirements before the store is used for real sales.']] },
 }
 
 function InformationPage({ page, onNavigate }) {
@@ -901,7 +825,7 @@ function App() {
   )
   const [checkoutError, setCheckoutError] = useState(() =>
     getRoutePath() === '/checkout/success' && !hasCheckoutSession
-      ? 'No Stripe checkout session was included in the return link.'
+      ? 'No Paystack checkout reference was included in the return link.'
       : '',
   )
 
@@ -1027,7 +951,7 @@ function App() {
       setCurrentPath(path)
       const sessionId = new URLSearchParams(window.location.search).get('session_id')
       setCheckoutStatus(path === '/checkout/success' && !sessionId ? 'error' : 'checking')
-      setCheckoutError(path === '/checkout/success' && !sessionId ? 'No Stripe checkout session was included in the return link.' : '')
+      setCheckoutError(path === '/checkout/success' && !sessionId ? 'No Paystack checkout reference was included in the return link.' : '')
     }
     window.addEventListener('popstate', updateRoute)
     return () => window.removeEventListener('popstate', updateRoute)
@@ -1052,7 +976,7 @@ function App() {
           setCartItems({})
         } else {
           setCheckoutStatus('error')
-          setCheckoutError('Stripe has not marked this payment as complete. Your bag has been kept.')
+          setCheckoutError('Paystack has not marked this payment as complete. Your bag has been kept.')
         }
       })
       .catch((error) => {
@@ -1097,7 +1021,7 @@ function App() {
     setSearchOpen(false)
     const sessionId = new URLSearchParams(window.location.search).get('session_id')
     setCheckoutStatus(path === '/checkout/success' && !sessionId ? 'error' : 'checking')
-    setCheckoutError(path === '/checkout/success' && !sessionId ? 'No Stripe checkout session was included in the return link.' : '')
+    setCheckoutError(path === '/checkout/success' && !sessionId ? 'No Paystack checkout reference was included in the return link.' : '')
     window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' })
   }
 
