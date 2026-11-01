@@ -109,6 +109,10 @@ input:focus-visible {
   gap: 34px;
 }
 
+.mobile-menu-toggle {
+  display: none;
+}
+
 .main-nav a {
   font-size: 12px;
   text-decoration: none;
@@ -1746,47 +1750,86 @@ input:focus-visible {
   }
 
   .site-header {
+    grid-template-columns: minmax(0, 1fr) auto;
     min-height: 69px;
-    gap: 12px;
-    padding: 10px 18px 8px;
+    gap: 8px;
+    padding: 9px 14px;
   }
 
   .wordmark-symbol {
-    font-size: 34px;
+    font-size: 32px;
   }
 
   .main-nav {
-    justify-content: flex-start;
-    gap: 24px;
-    overflow-x: auto;
-    padding: 5px 0 10px;
-    white-space: nowrap;
+    display: none;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    align-items: stretch;
+    gap: 0;
+    padding: 6px 0 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .main-nav.is-open {
+    display: flex;
+    flex-direction: column;
   }
 
   .main-nav a {
-    font-size: 12px;
+    padding: 13px 4px;
+    border-bottom: 1px solid var(--line);
+    font-size: 14px;
+  }
+
+  .main-nav a:last-child {
+    border-bottom: 0;
   }
 
   .header-actions {
-    gap: 7px;
+    grid-column: 2;
+    grid-row: 1;
+    gap: 2px;
   }
 
   .currency-selector {
-    min-width: 39px;
+    min-width: 36px;
   }
 
   .currency-selector select {
-    width: 42px;
+    width: 38px;
     font-size: 12px;
   }
 
   .currency-charge-note {
-    font-size: 12px;
+    display: none;
+  }
+
+  .icon-button,
+  .bag-button {
+    min-width: 36px;
+    min-height: 40px;
   }
 
   .bag-button {
-    gap: 5px;
-    font-size: 12px;
+    position: relative;
+    gap: 0;
+  }
+
+  .bag-label {
+    display: none;
+  }
+
+  .bag-count {
+    min-width: 17px;
+    height: 17px;
+    position: absolute;
+    top: 0;
+    right: -2px;
+    font-size: 10px;
+  }
+
+  .mobile-menu-toggle {
+    display: inline-flex;
   }
 
   .search-bar {

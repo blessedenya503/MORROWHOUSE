@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useMemo } from 'react'
-import { ArrowRight, CheckCircle, CircleNotch, Heart, LockKey, MagnifyingGlass, Minus, PaperPlaneRight, Plus, ShoppingBag, Sparkle, Trash, WarningCircle, X } from '@phosphor-icons/react'
+import { ArrowRight, CheckCircle, CircleNotch, Heart, List, LockKey, MagnifyingGlass, Minus, PaperPlaneRight, Plus, ShoppingBag, Sparkle, Trash, WarningCircle, X } from '@phosphor-icons/react'
 import { AnimatePresence, MotionConfig, motion, useReducedMotion, useScroll, useTransform } from 'framer-motion'
 import countryToCurrency from 'country-to-currency'
 import RibbonGlow from './components/RibbonGlow.jsx'
@@ -796,6 +796,7 @@ function App() {
   const [rates, setRates] = useState({ USD: 1 })
   const [currencyReady, setCurrencyReady] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [favorites, setFavorites] = useState([])
   const [cartItems, setCartItems] = useState(getSavedCart)
@@ -980,6 +981,7 @@ function App() {
     const updateRoute = () => {
       const path = getRoutePath()
       setCurrentPath(path)
+      setMobileMenuOpen(false)
       const sessionId = new URLSearchParams(window.location.search).get('session_id')
       setCheckoutStatus(path === '/checkout/success' && !sessionId ? 'error' : 'checking')
       setCheckoutError(path === '/checkout/success' && !sessionId ? 'No Paystack checkout reference was included in the return link.' : '')
@@ -1050,6 +1052,7 @@ function App() {
     window.history.pushState({}, '', path)
     setCurrentPath(getRoutePath())
     setSearchOpen(false)
+    setMobileMenuOpen(false)
     const sessionId = new URLSearchParams(window.location.search).get('session_id')
     setCheckoutStatus(path === '/checkout/success' && !sessionId ? 'error' : 'checking')
     setCheckoutError(path === '/checkout/success' && !sessionId ? 'No Paystack checkout reference was included in the return link.' : '')
@@ -1094,17 +1097,20 @@ function App() {
           <span className="wordmark-symbol" aria-hidden="true">m.</span>
           <span>MORROW<br />HOUSE</span>
         </a>
-        <nav className="main-nav" aria-label="Main navigation">
+        <nav id="main-navigation" className={`main-nav${mobileMenuOpen ? ' is-open' : ''}`} aria-label="Main navigation">
           <a href="/" aria-current={isHomePage ? 'page' : undefined} onClick={(event) => handleNavigate(event, '/')}>Home</a>
           <a href="/shop" aria-current={isShopPage ? 'page' : undefined} onClick={(event) => handleNavigate(event, '/shop')}>Shop</a>
           <a href="/track-order" aria-current={currentPath === '/track-order' ? 'page' : undefined} onClick={(event) => handleNavigate(event, '/track-order')}>Track order</a>
         </nav>
         <div className="header-actions">
           <CurrencySelector />
-          {(isHomePage || isShopPage) && <button type="button" className="icon-button search-toggle" aria-label={searchOpen ? 'Close search' : 'Search the shop'} onClick={() => setSearchOpen((open) => !open)}>{searchOpen ? <X size={20} /> : <MagnifyingGlass size={20} />}</button>}
+          {(isHomePage || isShopPage) && <button type="button" className="icon-button search-toggle" aria-label={searchOpen ? 'Close search' : 'Search the shop'} onClick={() => { setMobileMenuOpen(false); setSearchOpen((open) => !open) }}>{searchOpen ? <X size={20} /> : <MagnifyingGlass size={20} />}</button>}
           <a href="/cart" className="bag-button" aria-current={isCartPage ? 'page' : undefined} onClick={(event) => handleNavigate(event, '/cart')} aria-label={`Shopping bag, ${cartCount} items`}>
-            <ShoppingBag size={19} /><span>Bag</span><AnimatePresence initial={false} mode="popLayout"><motion.span key={cartCount} className="bag-count" initial={reduceMotion ? false : { scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.75, opacity: 0 }} transition={{ duration: 0.18 }}>{cartCount}</motion.span></AnimatePresence>
+            <ShoppingBag size={19} /><span className="bag-label">Bag</span><AnimatePresence initial={false} mode="popLayout"><motion.span key={cartCount} className="bag-count" initial={reduceMotion ? false : { scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.75, opacity: 0 }} transition={{ duration: 0.18 }}>{cartCount}</motion.span></AnimatePresence>
           </a>
+          <button type="button" className="icon-button mobile-menu-toggle" aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'} aria-expanded={mobileMenuOpen} aria-controls="main-navigation" onClick={() => { setSearchOpen(false); setMobileMenuOpen((open) => !open) }}>
+            {mobileMenuOpen ? <X size={21} aria-hidden="true" /> : <List size={21} aria-hidden="true" />}
+          </button>
         </div>
       </motion.header>
 
