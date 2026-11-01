@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useMemo } from 'react'
-import { ArrowRight, CheckCircle, CircleNotch, Heart, List, LockKey, MagnifyingGlass, Minus, PaperPlaneRight, Plus, ShoppingBag, Sparkle, Trash, WarningCircle, X } from '@phosphor-icons/react'
+import { ArrowLeft, ArrowRight, CheckCircle, CircleNotch, Heart, List, LockKey, MagnifyingGlass, Minus, PaperPlaneRight, Pause, Play, Plus, ShoppingBag, Sparkle, Trash, WarningCircle, X } from '@phosphor-icons/react'
 import { AnimatePresence, MotionConfig, motion, useReducedMotion, useScroll, useTransform } from 'framer-motion'
 import countryToCurrency from 'country-to-currency'
 import RibbonGlow from './components/RibbonGlow.jsx'
@@ -20,6 +20,12 @@ const categories = [
   { name: 'Living', label: 'A softer place to land', image: 'photo-1600210492486-724fe5c67fb0' },
   { name: 'Lighting', label: 'Set a different mood', image: 'photo-1507473885765-e6ed057f782c' },
   { name: 'Objects', label: 'The little things, considered', image: 'photo-1490312278390-ab64016e0aa9' },
+]
+
+const heroSlides = [
+  { image: 'photo-1600210492486-724fe5c67fb0', alt: 'A sunlit living room layered with natural textures', note: 'THE ART OF STAYING IN' },
+  { image: 'photo-1600607687939-ce8a6c25118c', alt: 'A calm, light-filled home with thoughtful furniture', note: 'ROOM TO SLOW DOWN' },
+  { image: 'photo-1600210491892-03d54c0aaf87', alt: 'A warm, collected living space made for gathering', note: 'MADE FOR GATHERING' },
 ]
 
 const currencyOptions = [
@@ -800,6 +806,10 @@ function App() {
   const [currencyReady, setCurrencyReady] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [heroSlide, setHeroSlide] = useState(0)
+  const [heroPaused, setHeroPaused] = useState(false)
+  const [heroHovered, setHeroHovered] = useState(false)
+  const [heroFocused, setHeroFocused] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [favorites, setFavorites] = useState([])
   const [cartItems, setCartItems] = useState(getSavedCart)
@@ -825,6 +835,14 @@ function App() {
       ? 'No Paystack checkout reference was included in the return link.'
       : '',
   )
+
+  useEffect(() => {
+    if (!isHomePage || reduceMotion || heroPaused || heroHovered || heroFocused) return undefined
+    const timer = window.setInterval(() => {
+      setHeroSlide((current) => (current + 1) % heroSlides.length)
+    }, 6500)
+    return () => window.clearInterval(timer)
+  }, [heroFocused, heroHovered, heroPaused, isHomePage, reduceMotion])
 
   useEffect(() => {
     let active = true
@@ -1084,6 +1102,10 @@ function App() {
     }
   }
 
+  function changeHeroSlide(direction) {
+    setHeroSlide((current) => (current + direction + heroSlides.length) % heroSlides.length)
+  }
+
   return (
     <CurrencyContext.Provider value={{ currency: currencyReady ? currency : 'USD', exchangeRate: currencyReady ? exchangeRate : 1, rates, currencyReady, onCurrencyChange: changeCurrency }}>
     <MotionConfig reducedMotion="user">
@@ -1165,16 +1187,46 @@ function App() {
           <NotFoundPage onNavigate={handleNavigate} />
         ) : (
           <motion.div key="store-home" initial={reduceMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ duration: 0.24 }}>
-        <section className="hero" aria-labelledby="hero-title" ref={heroRef}>
-          <motion.img className="hero-image" src={imageUrl('photo-1600210492486-724fe5c67fb0', 2200)} alt="Sunlit living room with sculptural furniture and warm natural textures" fetchPriority="high" initial={reduceMotion ? false : { opacity: 0, scale: 1.035 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }} style={{ y: reduceMotion ? 0 : heroImageY }} />
+        <section
+          className="hero"
+          aria-labelledby="hero-title"
+          ref={heroRef}
+          onMouseEnter={() => setHeroHovered(true)}
+          onMouseLeave={() => setHeroHovered(false)}
+          onFocusCapture={() => setHeroFocused(true)}
+          onBlurCapture={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setHeroFocused(false)
+          }}
+        >
+          <AnimatePresence initial={false}>
+            <motion.img
+              key={heroSlides[heroSlide].image}
+              className="hero-image"
+              src={imageUrl(heroSlides[heroSlide].image, 2200)}
+              alt={heroSlides[heroSlide].alt}
+              fetchPriority={heroSlide === 0 ? 'high' : 'auto'}
+              initial={reduceMotion ? false : { opacity: 0, scale: 1.025 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={reduceMotion ? undefined : { opacity: 0 }}
+              transition={{ duration: reduceMotion ? 0.01 : 0.8, ease: [0.22, 1, 0.36, 1] }}
+              style={{ y: reduceMotion ? 0 : heroImageY }}
+            />
+          </AnimatePresence>
           <div className="hero-shade" />
           <motion.div className="hero-content" variants={reduceMotion ? undefined : revealGroup} initial={reduceMotion ? false : 'hidden'} animate="visible">
             <motion.span className="hero-kicker" variants={reduceMotion ? undefined : revealItem}><span /> A little more home, a little less ordinary</motion.span>
             <motion.h1 id="hero-title" variants={reduceMotion ? undefined : revealItem}>The pieces<br />they'll ask<br /><em>where you found.</em></motion.h1>
             <motion.p variants={reduceMotion ? undefined : revealItem}>Considered objects for the rituals, rooms, and very good nights in that make a place yours.</motion.p>
             <motion.a className="hero-cta" href="#bestsellers" variants={reduceMotion ? undefined : revealItem} whileHover={reduceMotion ? undefined : { x: 4 }}>Find your new favorite <ArrowRight size={17} /></motion.a>
+            <div className="hero-controls" role="group" aria-label="Hero slideshow controls">
+              <button type="button" className="hero-control-arrow" aria-label="Previous hero image" onClick={() => changeHeroSlide(-1)}><ArrowLeft size={17} aria-hidden="true" /></button>
+              <button type="button" className="hero-control-toggle" aria-label={heroPaused ? 'Play hero slideshow' : 'Pause hero slideshow'} onClick={() => setHeroPaused((paused) => !paused)}>
+                {heroPaused ? <Play size={14} weight="fill" aria-hidden="true" /> : <Pause size={14} weight="fill" aria-hidden="true" />}
+              </button>
+              <button type="button" className="hero-control-arrow" aria-label="Next hero image" onClick={() => changeHeroSlide(1)}><ArrowRight size={17} aria-hidden="true" /></button>
+            </div>
           </motion.div>
-          <motion.div className="hero-note" initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7, duration: 0.5 }}><span>01 / 03</span><span>THE ART OF STAYING IN</span></motion.div>
+          <motion.div className="hero-note" initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7, duration: 0.5 }}><span aria-live="off">{String(heroSlide + 1).padStart(2, '0')} / {String(heroSlides.length).padStart(2, '0')}</span><span>{heroSlides[heroSlide].note}</span></motion.div>
           {products[0] && <motion.a className="hero-product-note" href={`/product/${products[0].id}`} onClick={(event) => handleNavigate(event, `/product/${products[0].id}`)} initial={reduceMotion ? false : { opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.8, duration: 0.4 }}><span className="note-dot" /> Meet the {products[0].name} <ArrowRight size={14} /></motion.a>}
         </section>
 

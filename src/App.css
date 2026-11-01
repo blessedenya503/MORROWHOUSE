@@ -333,6 +333,38 @@ input:focus-visible {
   background: #fff;
 }
 
+.hero-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 21px;
+}
+
+.hero-control-arrow,
+.hero-control-toggle {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(25, 23, 20, 0.18);
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.hero-control-arrow:hover,
+.hero-control-toggle:hover {
+  border-color: #fff;
+  background: rgba(25, 23, 20, 0.48);
+}
+
+.hero-control-arrow:focus-visible,
+.hero-control-toggle:focus-visible {
+  outline-color: #fff;
+}
+
 .hero-note {
   position: absolute;
   bottom: 26px;
@@ -1881,6 +1913,17 @@ input:focus-visible {
   .hero-cta {
     min-height: 45px;
     margin-top: 19px;
+  }
+
+  .hero-controls {
+    gap: 8px;
+    margin-top: 17px;
+  }
+
+  .hero-control-arrow,
+  .hero-control-toggle {
+    width: 34px;
+    height: 34px;
   }
 
   .hero-note {
