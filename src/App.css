@@ -248,6 +248,8 @@ input:focus-visible {
 }
 
 .hero-image {
+  top: -36px;
+  height: calc(100% + 72px);
   object-fit: cover;
   object-position: center 56%;
 }
