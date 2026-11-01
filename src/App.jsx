@@ -114,6 +114,7 @@ function DesignEnthusiast() {
   const [assistantMode, setAssistantMode] = useState('guide')
   const [isAnswering, setIsAnswering] = useState(false)
   const messageEndRef = useRef(null)
+  const previousMessageCount = useRef(messages.length)
 
   useEffect(() => {
     let active = true
@@ -129,7 +130,9 @@ function DesignEnthusiast() {
   }, [])
 
   useEffect(() => {
-    if (!messages.length && !isAnswering) return
+    const hasNewMessages = messages.length > previousMessageCount.current
+    previousMessageCount.current = messages.length
+    if (!hasNewMessages && !isAnswering) return
     messageEndRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'end' })
   }, [messages, isAnswering, reduceMotion])
 
