@@ -2385,6 +2385,33 @@ input:focus-visible {
   gap: 12px;
 }
 
+.product-detail-add-button {
+  min-height: 58px;
+  justify-content: center;
+  border-radius: 3px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.045em;
+  white-space: nowrap;
+}
+
+.product-detail-add-button .add-to-bag-label,
+.product-detail-add-button .add-to-bag-success {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  white-space: nowrap;
+}
+
+.product-detail-add-button.is-added {
+  width: 100%;
+  min-width: 0;
+  min-height: 58px;
+  margin-inline: 0;
+  padding-inline: 16px;
+  border-radius: 3px;
+}
+
 .product-detail-cart-link,
 .product-service-notes a,
 .checkout-help-link {

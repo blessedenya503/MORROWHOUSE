@@ -340,7 +340,7 @@ function CheckoutSuccess({ status, error, sessionId, onNavigate }) {
   )
 }
 
-function ProductTile({ product, index, onNavigate, onAdd, isFavorite, onToggleFavorite }) {
+function ProductTile({ product, index, onNavigate, isFavorite, onToggleFavorite }) {
   const reduceMotion = useReducedMotion()
   const { currency, exchangeRate } = useCurrency()
   const productPath = `/product/${product.id}`
@@ -378,19 +378,11 @@ function ProductTile({ product, index, onNavigate, onAdd, isFavorite, onToggleFa
     >
       <div className="product-image-wrap group">
         <a href={productPath} onClick={(event) => onNavigate(event, productPath)} aria-label={`View ${product.name}`} className="product-image-link">
-          <motion.div
-            className="relative group"
-            whileHover={reduceMotion ? undefined : { scale: 1.02 }}
-            whileTap={reduceMotion ? undefined : { scale: 0.98 }}
-          >
-            <img
-              src={imageUrl(product.image, 900)}
-              alt={`${product.name} in a thoughtfully styled interior`}
-              loading="lazy"
-              className="transition-transform duration-300 ease-out group-hover:scale-105 group-active:scale-95"
-            />
-            <span className="absolute inset-0"></span>
-          </motion.div>
+          <img
+            src={imageUrl(product.image, 900)}
+            alt={`${product.name} in a thoughtfully styled interior`}
+            loading="lazy"
+          />
         </a>
         <div className="absolute top-2 right-2 z-10">
           <span className="product-badge">{product.badge}</span>
@@ -410,7 +402,7 @@ function ProductTile({ product, index, onNavigate, onAdd, isFavorite, onToggleFa
   )
 }
 
-function ProductCollectionShelves({ products, onNavigate, onAdd, onSelectCategory, favorites, onToggleFavorite }) {
+function ProductCollectionShelves({ products, onNavigate, onSelectCategory, favorites, onToggleFavorite }) {
   const collections = categories
     .map((category) => ({
       ...category,
@@ -425,13 +417,13 @@ function ProductCollectionShelves({ products, onNavigate, onAdd, onSelectCategor
         <button type="button" className="text-link" onClick={() => onSelectCategory(collection.name)}>Shop {collection.name} <ArrowRight size={15} /></button>
       </div>
       <div className="product-collection-row">
-        {collection.products.map((product, index) => <ProductTile key={product.id} product={product} index={index} onNavigate={onNavigate} onAdd={onAdd} isFavorite={favorites?.includes(product.id)} onToggleFavorite={onToggleFavorite} />)}
+        {collection.products.map((product, index) => <ProductTile key={product.id} product={product} index={index} onNavigate={onNavigate} isFavorite={favorites?.includes(product.id)} onToggleFavorite={onToggleFavorite} />)}
       </div>
     </section>)}
   </div>
 }
 
-function AddToBagButton({ product, className, compact = false, onAdd }) {
+function AddToBagButton({ product, className, onAdd }) {
   const reduceMotion = useReducedMotion()
   const [added, setAdded] = useState(false)
 
@@ -459,17 +451,18 @@ function AddToBagButton({ product, className, compact = false, onAdd }) {
             transition={reduceMotion ? { duration: 0.01 } : { type: 'spring', stiffness: 480, damping: 25 }}
           >
             <CheckCircle size={21} weight="fill" aria-hidden="true" />
+            <span>Added to bag</span>
           </motion.span>
         ) : (
           <motion.span
             key="label"
-            className={`add-to-bag-label${compact ? ' is-compact' : ''}`}
+            className="add-to-bag-label"
             initial={reduceMotion ? false : { opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={reduceMotion ? undefined : { opacity: 0, scale: 0.96 }}
             transition={{ duration: reduceMotion ? 0.01 : 0.16 }}
           >
-            {compact ? <><Plus size={16} /><span>Add to bag</span></> : <>Add to bag <Plus size={17} /></>}
+            Add to bag
           </motion.span>
         )}
       </AnimatePresence>
@@ -477,7 +470,7 @@ function AddToBagButton({ product, className, compact = false, onAdd }) {
   )
 }
 
-function ShopPage({ products, activeCategory, setActiveCategory, searchTerm, setSearchTerm, onNavigate, onAdd }) {
+function ShopPage({ products, activeCategory, setActiveCategory, searchTerm, setSearchTerm, onNavigate }) {
   const visibleProducts = products.filter((product) => {
     const matchesCategory = activeCategory === 'Everything' || product.category === activeCategory
     const matchesSearch = `${product.name} ${product.detail} ${product.category} ${product.searchTerms}`.toLowerCase().includes(searchTerm.trim().toLowerCase())
@@ -552,8 +545,8 @@ function ShopPage({ products, activeCategory, setActiveCategory, searchTerm, set
       )}
 
       {visibleProducts.length ? activeCategory === 'Everything'
-        ? <ProductCollectionShelves products={visibleProducts} onNavigate={onNavigate} onAdd={onAdd} onSelectCategory={setActiveCategory} />
-        : <div className="product-grid shop-product-grid">{filteredProducts.map((product, index) => <ProductTile key={product.id} product={product} index={index} onNavigate={onNavigate} onAdd={onAdd} />)}</div>
+        ? <ProductCollectionShelves products={visibleProducts} onNavigate={onNavigate} onSelectCategory={setActiveCategory} />
+        : <div className="product-grid shop-product-grid">{filteredProducts.map((product, index) => <ProductTile key={product.id} product={product} index={index} onNavigate={onNavigate} />)}</div>
         : <div className="empty-results"><p>No pieces found for “{searchTerm}”.</p><button type="button" className="text-link" onClick={() => { setSearchTerm(''); setActiveCategory('Everything') }}>Clear filters <ArrowRight size={15} /></button></div>}
     </motion.section>
   )
@@ -570,9 +563,9 @@ function ProductPage({ product, products, onNavigate, onAdd }) {
       <nav className="cart-breadcrumb" aria-label="Breadcrumb"><a href="/" onClick={(event) => onNavigate(event, '/')}>Home</a><span aria-hidden="true">/</span><a href="/shop" onClick={(event) => onNavigate(event, '/shop')}>Shop</a><span aria-hidden="true">/</span><span aria-current="page">{product.name}</span></nav>
       <div className="product-detail-layout">
         <motion.div className="product-detail-image" initial={reduceMotion ? false : { opacity: 0, scale: 1.02 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.55 }}><img src={imageUrl(product.image, 1400)} alt={`${product.name} styled in a home`} /></motion.div>
-        <div className="product-detail-copy"><span className="overline">{product.category} · MORROW HOUSE</span><h1 id="product-title">{product.name}</h1><span className="product-detail-price">{formatPrice(product.price, currency, exchangeRate)}</span><p className="product-detail-description">{product.detail}. A thoughtful piece, chosen to feel at home from the very first day.</p><p className="product-detail-badge">{product.badge}</p><AddToBagButton product={product} onAdd={onAdd} className="checkout-button" /><a className="product-detail-cart-link" href="/cart" onClick={(event) => onNavigate(event, '/cart')}>View your bag <ArrowRight size={15} /></a><div className="product-service-notes"><a href="/shipping" onClick={(event) => onNavigate(event, '/shipping')}>Complimentary shipping over $150</a><a href="/refunds" onClick={(event) => onNavigate(event, '/refunds')}>30 days to make yourself at home</a></div></div>
+        <div className="product-detail-copy"><span className="overline">{product.category} · MORROW HOUSE</span><h1 id="product-title">{product.name}</h1><span className="product-detail-price">{formatPrice(product.price, currency, exchangeRate)}</span><p className="product-detail-description">{product.detail}. A thoughtful piece, chosen to feel at home from the very first day.</p><p className="product-detail-badge">{product.badge}</p><AddToBagButton product={product} onAdd={onAdd} className="checkout-button product-detail-add-button" /><a className="product-detail-cart-link" href="/cart" onClick={(event) => onNavigate(event, '/cart')}>View your bag <ArrowRight size={15} /></a><div className="product-service-notes"><a href="/shipping" onClick={(event) => onNavigate(event, '/shipping')}>Complimentary shipping over $150</a><a href="/refunds" onClick={(event) => onNavigate(event, '/refunds')}>30 days to make yourself at home</a></div></div>
       </div>
-      <section className="related-products" aria-labelledby="related-products-title"><div className="section-intro"><div><span className="overline">A FEW GOOD COMPANIONS</span><h2 id="related-products-title">Make room for more.</h2></div><a className="text-link" href="/shop" onClick={(event) => onNavigate(event, '/shop')}>Shop everything <ArrowRight size={15} /></a></div><div className="product-grid">{relatedProducts.slice(0, 3).map((item, index) => <ProductTile key={item.id} product={item} index={index} onNavigate={onNavigate} onAdd={onAdd} />)}</div></section>
+      <section className="related-products" aria-labelledby="related-products-title"><div className="section-intro"><div><span className="overline">A FEW GOOD COMPANIONS</span><h2 id="related-products-title">Make room for more.</h2></div><a className="text-link" href="/shop" onClick={(event) => onNavigate(event, '/shop')}>Shop everything <ArrowRight size={15} /></a></div><div className="product-grid">{relatedProducts.slice(0, 3).map((item, index) => <ProductTile key={item.id} product={item} index={index} onNavigate={onNavigate} />)}</div></section>
     </motion.section>
   )
 }
@@ -1149,7 +1142,7 @@ function App() {
           </motion.div>
         ) : isShopPage ? (
           <motion.div key="shop-page" initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ duration: 0.24 }}>
-            <ShopPage products={products} activeCategory={activeCategory} setActiveCategory={setActiveCategory} searchTerm={searchTerm} setSearchTerm={setSearchTerm} onNavigate={handleNavigate} onAdd={handleAddToBag} />
+            <ShopPage products={products} activeCategory={activeCategory} setActiveCategory={setActiveCategory} searchTerm={searchTerm} setSearchTerm={setSearchTerm} onNavigate={handleNavigate} />
           </motion.div>
         ) : isProductPage ? (
           <ProductPage product={currentProduct} products={products} onNavigate={handleNavigate} onAdd={handleAddToBag} />
@@ -1215,10 +1208,10 @@ function App() {
 
             {filteredProducts.length > 0 ? (
               activeCategory === 'Everything'
-                ? <ProductCollectionShelves products={filteredProducts} onNavigate={handleNavigate} onAdd={handleAddToBag} onSelectCategory={setActiveCategory} favorites={favorites} onToggleFavorite={toggleFavorite} />
+                ? <ProductCollectionShelves products={filteredProducts} onNavigate={handleNavigate} onSelectCategory={setActiveCategory} favorites={favorites} onToggleFavorite={toggleFavorite} />
                 : <motion.div className="product-grid" layout>
                   <AnimatePresence initial={false} mode="popLayout">
-                    {filteredProducts.map((product, index) => <ProductTile key={product.id} product={product} index={index} onNavigate={handleNavigate} onAdd={handleAddToBag} />)}
+                    {filteredProducts.map((product, index) => <ProductTile key={product.id} product={product} index={index} onNavigate={handleNavigate} />)}
                   </AnimatePresence>
                 </motion.div>
             ) : (
