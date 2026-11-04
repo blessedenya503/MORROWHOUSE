@@ -13,6 +13,8 @@ Access is intentionally limited to this computer. The admin UI and API must not 
 
 The dashboard currently displays **preview data only**. Stock edits and order status changes stay in memory and reset when the server restarts. `admin/data.js` is sample data, not your real catalog or orders.
 
+With Supabase connected, use **Inventory → Delete** to permanently remove a product from the catalog and storefront. The dashboard asks for confirmation first. Existing order-item snapshots are retained; their product reference is set to null by the schema.
+
 ## Supabase setup
 
 1. Create a Supabase project and keep its database password and API keys private.

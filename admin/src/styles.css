@@ -104,6 +104,7 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .refresh-button { min-height: 34px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid #d9d6ce; padding: 0 10px; color: #5f5b53; background: var(--admin-paper); font-size: 9px; cursor: pointer; }
 .refresh-button:hover { border-color: #b7afa2; color: var(--admin-wine); }
 .admin-message { display: flex; align-items: center; gap: 7px; margin: -11px 0 15px; color: #556549; font-size: 9px; }
+.admin-message.admin-error { color: var(--admin-red); }
 .loading-line { height: 2px; overflow: hidden; margin: -9px 0 14px; background: #ebe9e2; }
 .loading-line span { width: 35%; height: 100%; display: block; background: var(--admin-wine); animation: loading 850ms ease-in-out infinite alternate; }
 @keyframes loading { to { transform: translateX(190%); } }
@@ -227,6 +228,9 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .inventory-product > div { display: grid; gap: 4px; }
 .inventory-product strong { color: var(--admin-ink); font-size: 8px; font-weight: 600; }
 .inventory-product span, .sku { color: #99958b !important; font-size: 7px !important; }
+.inventory-delete-button { min-height: 28px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid #ead8d3; padding: 0 8px; color: var(--admin-red); background: white; font-size: 8px; cursor: pointer; }
+.inventory-delete-button:hover:not(:disabled) { border-color: #d7b4ab; background: #fbf3f1; }
+.inventory-delete-button:disabled { cursor: wait; }
 .supplier-margin-control { display: grid; gap: 4px; color: var(--admin-muted); font-size: 8px; font-weight: 600; }
 .supplier-margin-input { display: flex; align-items: center; gap: 5px; }
 .supplier-margin-input input { width: 66px; height: 30px; border: 1px solid var(--admin-line); padding: 0 6px; color: var(--admin-ink); background: white; font-size: 10px; }
@@ -272,7 +276,7 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   .stock-panel { padding-bottom: 12px; }
   .table-panel { padding: 14px 12px; }
   .orders-table { min-width: 680px; }
-  .inventory-table { min-width: 710px; }
+  .inventory-table { min-width: 790px; }
   .full-table-panel { margin: 0; }
   .login-panel h1 { font-size: 49px; }
 }

@@ -443,8 +443,7 @@ async function getStoreProducts() {
       .eq('is_active', true)
       .order('name', { ascending: true })
     if (error) throw error
-    if (data && data.length > 0) return data
-    return fallbackProducts
+    return Array.isArray(data) ? data : []
   } catch (err) {
     console.warn('Supabase products fetch failed, using fallback catalog:', err.message || err)
     return fallbackProducts

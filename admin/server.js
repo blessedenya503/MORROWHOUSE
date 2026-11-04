@@ -223,6 +223,23 @@ async function updateProductStock(productId, stock) {
   return normalizeProduct(data)
 }
 
+async function deleteProduct(productId) {
+  if (!supabase) {
+    const productIndex = products.findIndex((item) => item.id === productId)
+    if (productIndex === -1) return null
+    return products.splice(productIndex, 1)[0]
+  }
+
+  const { data, error } = await supabase
+    .from('products')
+    .delete()
+    .eq('id', productId)
+    .select('id')
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
 async function getLiveCJData() {
   if (!supabase) {
     return {
@@ -591,6 +608,22 @@ app.patch('/api/admin/products/:productId', async (request, response) => {
     response.json({ product })
   } catch (error) {
     response.status(500).json({ error: error.message || 'The product could not be updated.' })
+  }
+})
+
+app.delete('/api/admin/products/:productId', async (request, response) => {
+  const productId = String(request.params.productId || '').trim()
+  if (!productId) {
+    return response.status(400).json({ error: 'A product ID is required.' })
+  }
+
+  try {
+    const product = await deleteProduct(productId)
+    if (!product) return response.status(404).json({ error: 'Product not found.' })
+    response.json({ ok: true, productId })
+  } catch (error) {
+    console.error('Admin product deletion failed:', error.message || error)
+    response.status(500).json({ error: error.message || 'The product could not be deleted.' })
   }
 })
 

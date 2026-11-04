@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowRight, ArrowUpRight, Bell, ChartBar, Check, CircleNotch, Clock, Cube, House, LockKey, MagnifyingGlass, Minus, Package, Plus, SignOut, SquaresFour, TrendUp, Truck, WarningCircle, X } from '@phosphor-icons/react'
+import { ArrowDown, ArrowRight, ArrowUpRight, Bell, ChartBar, Check, CircleNotch, Clock, Cube, House, LockKey, MagnifyingGlass, Minus, Package, Plus, SignOut, SquaresFour, Trash, TrendUp, Truck, WarningCircle, X } from '@phosphor-icons/react'
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'framer-motion'
 import { formatCurrency, imageUrl } from './format.js'
 
@@ -110,11 +110,11 @@ function OrdersTable({ orders, onStatusChange, compact = false }) {
   )
 }
 
-function InventoryTable({ products, onStockChange }) {
+function InventoryTable({ products, onStockChange, onDeleteProduct, pending }) {
   return (
     <div className="table-scroll">
       <table className="inventory-table">
-        <thead><tr><th>Product</th><th>SKU</th><th>Category</th><th>Price</th><th>In stock</th><th>Stock health</th></tr></thead>
+        <thead><tr><th>Product</th><th>SKU</th><th>Category</th><th>Price</th><th>In stock</th><th>Stock health</th><th>Actions</th></tr></thead>
         <tbody>{products.map((product) => {
           const lowStock = product.stock <= product.reorderAt
           return <tr key={product.id}>
@@ -122,6 +122,7 @@ function InventoryTable({ products, onStockChange }) {
             <td className="sku">{product.sku}</td><td>{product.category}</td><td>{formatCurrency(product.price)}</td>
             <td><div className="stock-stepper"><button type="button" aria-label={`Remove one ${product.name} from stock`} disabled={product.stock === 0} onClick={() => onStockChange(product.id, product.stock - 1)}><Minus size={13} /></button><strong>{product.stock}</strong><button type="button" aria-label={`Add one ${product.name} to stock`} onClick={() => onStockChange(product.id, product.stock + 1)}><Plus size={13} /></button></div></td>
             <td><span className={`stock-health ${lowStock ? 'is-low' : 'is-healthy'}`}><i />{lowStock ? 'Reorder soon' : 'In good shape'}</span></td>
+            <td><button type="button" className="inventory-delete-button" disabled={pending} onClick={() => onDeleteProduct(product)}><Trash size={13} aria-hidden="true" />Delete</button></td>
           </tr>
         })}</tbody>
       </table>
@@ -263,7 +264,7 @@ function SupplierTable({ products, syncSummary = {}, onApprove, onImportProduct,
   )
 }
 
-function Dashboard({ data, onReload, onLogout, onUpdateStock, onUpdateOrder, onApproveSupplier, onImportSupplier, onSearchSupplier, onSyncSupplierStock, message, pending }) {
+function Dashboard({ data, onReload, onLogout, onUpdateStock, onDeleteProduct, onUpdateOrder, onApproveSupplier, onImportSupplier, onSearchSupplier, onSyncSupplierStock, message, error, pending }) {
   const [activeView, setActiveView] = useState('overview')
   const [search, setSearch] = useState('')
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false)
@@ -307,6 +308,7 @@ function Dashboard({ data, onReload, onLogout, onUpdateStock, onUpdateOrder, onA
           <div className="page-heading"><div><span className="eyebrow">{activeView === 'overview' ? todayLabel : 'MORROW HOUSE · OPERATIONS'}</span><h1>{activeView === 'overview' ? <>A good day to<br /><em>make things happen.</em></> : title}</h1><p>{activeView === 'overview' ? 'Here’s the shape of the shop this week.' : activeView === 'orders' ? 'Stay close to every good thing on its way.' : 'Keep every considered piece accounted for.'}</p></div><div className="page-heading-actions"><button type="button" className="quick-import-button" onClick={() => { setActiveView('supplier'); setMobileNavigationOpen(false); setSearch(''); setQuickImportJump((count) => count + 1) }}><ArrowDown size={15} />CJ Import</button><button type="button" className="refresh-button" onClick={onReload} disabled={pending}><CircleNotch className={pending ? 'spin' : ''} size={16} />Refresh</button></div></div>
 
           {message && <div className="admin-message" role="status"><Check size={15} />{message}</div>}
+          {error && <div className="admin-message admin-error" role="alert"><WarningCircle size={15} />{error}</div>}
           {pending && <div className="loading-line" aria-label="Saving changes"><span /></div>}
 
           {activeView === 'overview' && <motion.div key="overview" className="view-stack" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24 }}>
@@ -318,7 +320,7 @@ function Dashboard({ data, onReload, onLogout, onUpdateStock, onUpdateOrder, onA
 
           {activeView === 'orders' && <motion.section key="orders" className="panel table-panel full-table-panel" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24 }}><div className="panel-heading"><div><span className="eyebrow">{data.orders.length} RECENT ORDERS</span><h2>Every order, in one place.</h2></div><div className="table-heading-note"><Truck size={17} /><span>Carrier tracking not connected</span></div></div><OrdersTable orders={filteredOrders} onStatusChange={onUpdateOrder} /><p className="table-footnote">{data.mode === 'live' ? 'Status changes persist to the connected Supabase order table.' : 'Empty workspace — no order records are available yet.'}</p></motion.section>}
 
-          {activeView === 'inventory' && <motion.section key="inventory" className="panel table-panel full-table-panel" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24 }}><div className="panel-heading"><div><span className="eyebrow">{data.products.length} LISTED PRODUCTS</span><h2>Count what matters.</h2></div><span className="table-heading-note"><span className="stock-legend-dot" /> Low stock at reorder point</span></div><InventoryTable products={filteredProducts} onStockChange={onUpdateStock} /><p className="table-footnote">{data.mode === 'live' ? 'Stock changes persist to the connected Supabase products table.' : 'Empty workspace — no product records are available yet.'}</p></motion.section>}
+          {activeView === 'inventory' && <motion.section key="inventory" className="panel table-panel full-table-panel" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24 }}><div className="panel-heading"><div><span className="eyebrow">{data.products.length} LISTED PRODUCTS</span><h2>Count what matters.</h2></div><span className="table-heading-note"><span className="stock-legend-dot" /> Low stock at reorder point</span></div><InventoryTable products={filteredProducts} onStockChange={onUpdateStock} onDeleteProduct={onDeleteProduct} pending={pending} /><p className="table-footnote">{data.mode === 'live' ? 'Stock changes persist to the connected Supabase products table. Deleting a product removes it from the storefront; saved order-item details are retained.' : 'Empty workspace — no product records are available yet.'}</p></motion.section>}
 
           {activeView === 'supplier' && <motion.section key="supplier" className="supplier-stack" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24 }}><SupplierTable products={data.supplier || []} syncSummary={data.syncSummary || {}} onApprove={onApproveSupplier} onImportProduct={onImportSupplier} onSearchProducts={onSearchSupplier} onSyncStock={onSyncSupplierStock} importPanelRef={supplierImportPanelRef} importInputRef={supplierImportInputRef} /></motion.section>}
         </main>
@@ -347,9 +349,11 @@ export default function App() {
         syncSummary: dashboard.syncSummary || { imported: 0, approved: 0, pending: 0, logs: [] },
       })
       setAuthenticated(true)
+      return true
     } catch (error) {
       setAuthenticated(false)
       setLoadError(error instanceof Error ? error.message : 'Dashboard data could not be loaded.')
+      return false
     } finally {
       setCheckingSession(false)
       setPending(false)
@@ -367,12 +371,34 @@ export default function App() {
   async function updateRecord(path, body, successMessage) {
     setPending(true)
     setMessage('')
+    setLoadError('')
     try {
       await adminRequest(path, { method: 'PATCH', body: JSON.stringify(body) })
       await loadDashboard()
       setMessage(successMessage)
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'That change could not be saved.')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  async function handleDeleteProduct(product) {
+    const confirmed = window.confirm(`Permanently delete "${product.name}" from the product catalog? It will disappear from the storefront. Existing order details will be kept. This cannot be undone.`)
+    if (!confirmed) return
+
+    setPending(true)
+    setMessage('')
+    setLoadError('')
+    try {
+      await adminRequest(`products/${encodeURIComponent(product.id)}`, { method: 'DELETE' })
+      if (!await loadDashboard()) {
+        setLoadError(`${product.name} was deleted, but inventory could not be refreshed. Use Refresh to reload it.`)
+        return
+      }
+      setMessage(`${product.name} was deleted from the catalog.`)
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'The product could not be deleted.')
     } finally {
       setPending(false)
     }
@@ -446,7 +472,7 @@ export default function App() {
   return (
     <MotionConfig reducedMotion="user">
       <div className="admin-app">
-        {checkingSession ? <main className="admin-loading"><CircleNotch className="spin" size={22} /><span>Checking this private workspace…</span></main> : authenticated && data ? <Dashboard data={data} onReload={loadDashboard} onLogout={logout} onUpdateStock={(id, stock) => updateRecord(`products/${encodeURIComponent(id)}`, { stock }, 'Stock level updated in this preview.')} onUpdateOrder={(id, status) => updateRecord(`orders/${encodeURIComponent(id)}`, { status }, 'Order status updated in this preview.')} onApproveSupplier={handleApproveSupplier} onApproveAllSupplier={handleApproveAllSupplier} onImportSupplier={handleImportSupplier} onSearchSupplier={handleSearchSupplier} onSyncSupplierStock={handleSyncSupplierStock} message={message || loadError} pending={pending} /> : <AnimatePresence mode="wait"><motion.div key="login" initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><LoginPage onLogin={loadDashboard} /></motion.div></AnimatePresence>}
+        {checkingSession ? <main className="admin-loading"><CircleNotch className="spin" size={22} /><span>Checking this private workspace…</span></main> : authenticated && data ? <Dashboard data={data} onReload={loadDashboard} onLogout={logout} onUpdateStock={(id, stock) => updateRecord(`products/${encodeURIComponent(id)}`, { stock }, 'Stock level updated in this preview.')} onDeleteProduct={handleDeleteProduct} onUpdateOrder={(id, status) => updateRecord(`orders/${encodeURIComponent(id)}`, { status }, 'Order status updated in this preview.')} onApproveSupplier={handleApproveSupplier} onApproveAllSupplier={handleApproveAllSupplier} onImportSupplier={handleImportSupplier} onSearchSupplier={handleSearchSupplier} onSyncSupplierStock={handleSyncSupplierStock} message={message} error={loadError} pending={pending} /> : <AnimatePresence mode="wait"><motion.div key="login" initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><LoginPage onLogin={loadDashboard} /></motion.div></AnimatePresence>}
       </div>
     </MotionConfig>
   )
