@@ -7,6 +7,7 @@ import { buildCJProductImportPayload, getCJConfig, getProductDetails, getProduct
 const host = '127.0.0.1'
 const port = Number(process.env.ADMIN_API_PORT || 4243)
 const webOrigin = process.env.ADMIN_WEB_ORIGIN || 'http://127.0.0.1:4174'
+const configuredWebUrl = new URL(webOrigin)
 const password = process.env.ADMIN_PASSWORD || ''
 const sessionSecret = process.env.ADMIN_SESSION_SECRET || randomBytes(32).toString('hex')
 const sessionDuration = 8 * 60 * 60 * 1000
@@ -19,6 +20,21 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const supabase = supabaseUrl && supabaseServiceRoleKey ? createClient(supabaseUrl, supabaseServiceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } }) : null
 const app = express()
 
+function isAllowedAdminOrigin(origin) {
+  if (origin === webOrigin) return true
+
+  try {
+    const requestOrigin = new URL(origin)
+    const loopbackHosts = new Set(['localhost', '127.0.0.1', '[::1]'])
+    return requestOrigin.protocol === configuredWebUrl.protocol
+      && requestOrigin.port === configuredWebUrl.port
+      && loopbackHosts.has(requestOrigin.hostname)
+      && loopbackHosts.has(configuredWebUrl.hostname)
+  } catch {
+    return false
+  }
+}
+
 if (password.length < 16) {
   console.error('Admin server not started: set ADMIN_PASSWORD to a unique passphrase of at least 16 characters in .env.')
   process.exit(1)
@@ -28,7 +44,7 @@ app.disable('x-powered-by')
 app.use(express.json({ limit: '8kb' }))
 app.use((request, response, next) => {
   response.set('Cache-Control', 'no-store')
-  if (request.headers.origin && request.headers.origin !== webOrigin) {
+  if (request.headers.origin && !isAllowedAdminOrigin(request.headers.origin)) {
     return response.status(403).json({ error: 'Requests must come from the private admin app.' })
   }
   next()
