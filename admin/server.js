@@ -175,7 +175,7 @@ async function getLiveDashboardData() {
 
   try {
     const [productResult, orderResult, itemResult] = await Promise.all([
-      supabase.from('products').select('*').order('name', { ascending: true }),
+      supabase.from('products').select('*').eq('is_active', true).order('name', { ascending: true }),
       supabase.from('orders').select('*').order('created_at', { ascending: false }),
       supabase.from('order_items').select('*'),
     ])
@@ -232,8 +232,9 @@ async function deleteProduct(productId) {
 
   const { data, error } = await supabase
     .from('products')
-    .delete()
+    .update({ is_active: false, updated_at: new Date().toISOString() })
     .eq('id', productId)
+    .eq('is_active', true)
     .select('id')
     .maybeSingle()
   if (error) throw error

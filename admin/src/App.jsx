@@ -384,7 +384,7 @@ export default function App() {
   }
 
   async function handleDeleteProduct(product) {
-    const confirmed = window.confirm(`Permanently delete "${product.name}" from the product catalog? It will disappear from the storefront. Existing order details will be kept. This cannot be undone.`)
+    const confirmed = window.confirm(`Remove "${product.name}" from Inventory and the storefront? Existing order details will be kept. You can restore the product later by approving it again from Supplier.`)
     if (!confirmed) return
 
     setPending(true)
@@ -393,10 +393,10 @@ export default function App() {
     try {
       await adminRequest(`products/${encodeURIComponent(product.id)}`, { method: 'DELETE' })
       if (!await loadDashboard()) {
-        setLoadError(`${product.name} was deleted, but inventory could not be refreshed. Use Refresh to reload it.`)
+        setLoadError(`${product.name} was removed, but Inventory could not be refreshed. Use Refresh to reload it.`)
         return
       }
-      setMessage(`${product.name} was deleted from the catalog.`)
+      setMessage(`${product.name} was removed from the storefront and Inventory.`)
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'The product could not be deleted.')
     } finally {
