@@ -236,6 +236,7 @@ input:focus-visible {
   isolation: isolate;
   color: #fff;
   background: #51483f;
+  box-shadow: inset 0 0 0 1px rgba(239, 218, 191, 0.3);
 }
 
 .hero-image,
@@ -252,6 +253,7 @@ input:focus-visible {
   height: calc(100% + 72px);
   object-fit: cover;
   object-position: center 56%;
+  filter: saturate(0.82) sepia(0.1) contrast(1.04);
 }
 
 .hero-shade {
@@ -337,34 +339,84 @@ input:focus-visible {
 
 .hero-controls {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 21px;
+  gap: 16px;
+  width: fit-content;
+  margin-top: 29px;
 }
 
-.hero-control-arrow,
-.hero-control-toggle {
-  width: 36px;
-  height: 36px;
+.hero-control {
+  width: 82px;
   display: grid;
-  place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.62);
-  border-radius: 50%;
-  color: #fff;
-  background: rgba(25, 23, 20, 0.18);
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  color: rgba(255, 255, 255, 0.57);
+  background: transparent;
   cursor: pointer;
-  transition: background 160ms ease, border-color 160ms ease;
+  text-align: left;
 }
 
-.hero-control-arrow:hover,
-.hero-control-toggle:hover {
-  border-color: #fff;
-  background: rgba(25, 23, 20, 0.48);
+.hero-control-label {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 15px;
+  font-variant-numeric: oldstyle-nums;
+  line-height: 1;
+  transition: color 180ms ease;
 }
 
-.hero-control-arrow:focus-visible,
-.hero-control-toggle:focus-visible {
-  outline-color: #fff;
+.hero-control-label > span {
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.hero-control-track {
+  height: 1px;
+  display: block;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.hero-control-track > span {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #e1b992;
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+.hero-control.is-active {
+  color: #fff;
+}
+
+.hero-control.is-active .hero-control-track > span {
+  animation: hero-slide-progress 6.5s linear forwards;
+}
+
+.hero-controls.is-static .hero-control.is-active .hero-control-track > span {
+  animation: none;
+  transform: scaleX(1);
+}
+
+.hero-control:hover,
+.hero-control:focus-visible {
+  color: #fff;
+}
+
+.hero-control:focus-visible {
+  outline: 1px solid #e1b992;
+  outline-offset: 5px;
+}
+
+@keyframes hero-slide-progress {
+  to {
+    transform: scaleX(1);
+  }
 }
 
 .hero-note {
@@ -372,10 +424,23 @@ input:focus-visible {
   bottom: 26px;
   left: clamp(32px, 9vw, 140px);
   display: flex;
-  gap: 16px;
+  align-items: center;
+  gap: 12px;
   color: rgba(255, 255, 255, 0.78);
-  font-size: 12px;
-  letter-spacing: 1.4px;
+  font-size: 10px;
+  letter-spacing: 1.6px;
+}
+
+.hero-note > span:first-child {
+  color: #e1b992;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.hero-note > i {
+  width: 24px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.62);
 }
 
 .hero-product-note {
@@ -1918,21 +1983,28 @@ input:focus-visible {
   }
 
   .hero-controls {
-    gap: 8px;
-    margin-top: 17px;
+    gap: 12px;
+    margin-top: 23px;
   }
 
-  .hero-control-arrow,
-  .hero-control-toggle {
-    width: 34px;
-    height: 34px;
+  .hero-control {
+    width: 76px;
+  }
+
+  .hero-control-label {
+    gap: 5px;
+    font-size: 14px;
+  }
+
+  .hero-control-label > span {
+    font-size: 8px;
   }
 
   .hero-note {
     bottom: 18px;
     left: 20px;
-    gap: 10px;
-    font-size: 12px;
+    gap: 8px;
+    font-size: 9px;
   }
 
   .hero-product-note {
