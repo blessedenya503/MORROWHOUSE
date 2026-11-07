@@ -453,9 +453,11 @@ export default function App() {
   async function handleSyncSupplierStock(productId) {
     setLoadError('')
     try {
-      await adminRequest(`cj/products/${encodeURIComponent(productId)}/sync-inventory`, { method: 'POST' })
+      const result = await adminRequest(`cj/products/${encodeURIComponent(productId)}/sync-inventory`, { method: 'POST' })
       await loadDashboard()
-      setMessage('Verified CJ stock refreshed.')
+      setMessage(Number(result.product?.stock) > 0
+        ? 'Verified CJ stock refreshed.'
+        : 'CJ returned no available stock for this product. Publishing stays disabled until stock is available.')
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'CJ inventory could not be refreshed.')
     }

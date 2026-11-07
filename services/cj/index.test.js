@@ -147,6 +147,32 @@ test('CJ inventory lookup sends the product ID and normalizes verified stock', a
   }
 })
 
+test('CJ inventory normalization reads stock counts directly from variant records', async () => {
+  const { normalizeCJInventoryResponse } = await loadFreshModule({
+    CJ_API_BASE_URL: 'https://example.test',
+    CJ_API_KEY: 'example-key',
+    CJ_API_SECRET: 'example-secret',
+  })
+
+  const inventory = normalizeCJInventoryResponse({
+    data: {
+      variantInventories: [
+        { vid: 'variant-1', totalInventoryNum: 12 },
+        { variantId: 'variant-2', availableInventory: '5' },
+        { vid: 'variant-3', inventory: 3 },
+        { vid: 'variant-4', inventory: [{ totalInventoryNum: 8 }] },
+      ],
+    },
+  })
+
+  assert.deepEqual(inventory.map((entry) => [entry.cjVariantId, entry.stock]), [
+    ['variant-1', 12],
+    ['variant-2', 5],
+    ['variant-3', 3],
+    ['variant-4', 8],
+  ])
+})
+
 test('CJ import payload normalizes supplier details into a backend-safe record', async () => {
   const { buildCJProductImportPayload } = await loadFreshModule({ CJ_API_BASE_URL: 'https://example.test', CJ_API_KEY: 'example-key', CJ_API_SECRET: 'example-secret' })
 
