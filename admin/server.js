@@ -1,8 +1,9 @@
 import 'dotenv/config'
 import express from 'express'
 import { createClient } from '@supabase/supabase-js'
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
-import { buildCJProductImportPayload, getCJConfig, getProductDetails, getProductInventory, normalizeCJInventoryResponse, normalizeCJProductSearchResults, searchProducts } from '../services/cj/index.js'
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
+import { buildCJProductImportPayload, getCJConfig, getProductDetails, getProductInventory, getProductVariants, normalizeCJInventoryResponse, normalizeCJProductSearchResults, searchProducts } from '../services/cj/index.js'
+import { buildPublicProductRecord, createProductEditorContent, getProductReadiness, PRODUCT_EDITOR_STATUSES, validateProductEditorContent } from '../services/cj/product-editor.js'
 
 const host = '127.0.0.1'
 const port = Number(process.env.ADMIN_API_PORT || 4243)
@@ -12,6 +13,7 @@ const password = process.env.ADMIN_PASSWORD || ''
 const sessionSecret = process.env.ADMIN_SESSION_SECRET || randomBytes(32).toString('hex')
 const sessionDuration = 8 * 60 * 60 * 1000
 const cookieName = 'morrow_admin_session'
+const adminActor = process.env.ADMIN_USER_LABEL || 'Local admin'
 const loginAttempts = new Map()
 const products = []
 const orders = []
@@ -41,7 +43,7 @@ if (password.length < 16) {
 }
 
 app.disable('x-powered-by')
-app.use(express.json({ limit: '8kb' }))
+app.use(express.json({ limit: '12mb' }))
 app.use((request, response, next) => {
   response.set('Cache-Control', 'no-store')
   if (request.headers.origin && !isAllowedAdminOrigin(request.headers.origin)) {
@@ -110,6 +112,8 @@ function normalizeProduct(product) {
 }
 
 function normalizeCJProduct(product) {
+  const editorContent = product.editor_content && typeof product.editor_content === 'object' ? product.editor_content : {}
+  const editorImages = Array.isArray(editorContent.images) ? editorContent.images : []
   const inventory = Array.isArray(product.inventory) ? product.inventory : []
   const stockTotal = inventory.reduce((total, entry) => {
     const value = Number(entry?.stock ?? entry?.quantity ?? entry?.available ?? 0)
@@ -121,13 +125,15 @@ function normalizeCJProduct(product) {
 
   return {
     id: String(product.cj_product_id ?? product.id ?? ''),
-    name: product.name ?? 'Untitled product',
+    name: editorContent.title || product.name || 'Untitled product',
     category: product.category ?? 'Uncategorized',
     sku: product.sku ?? '',
     price: Number(product.price ?? 0),
     stock: Math.max(0, stockTotal),
-    image: firstImage,
-    isActive: Boolean(product.is_active ?? false),
+    image: editorContent.primaryImage || editorImages[0]?.url || firstImage,
+    isActive: product.editor_status === 'PUBLISHED',
+    editorStatus: PRODUCT_EDITOR_STATUSES.includes(product.editor_status) ? product.editor_status : 'QUEUED',
+    editorContent,
     updatedAt: product.updated_at ?? product.updatedAt ?? null,
   }
 }
@@ -347,6 +353,33 @@ async function getLiveCJSyncStatus() {
   }
 }
 
+function getCJVariantRecords(response) {
+  const data = response && typeof response === 'object' && 'data' in response ? response.data : response
+  if (Array.isArray(data)) return data
+  return [data?.variants, data?.variantList, data?.list, data?.records, data?.content].find(Array.isArray) || []
+}
+
+async function writeProductEditorHistory(productId, action, beforeData, afterData) {
+  const { error } = await supabase.from('product_editor_history').insert({
+    cj_product_id: productId,
+    action,
+    actor: adminActor,
+    before_data: beforeData || {},
+    after_data: afterData || {},
+  })
+  if (error) throw error
+}
+
+async function getProductEditorRow(productId) {
+  const { data, error } = await supabase
+    .from('cj_products')
+    .select('*')
+    .eq('cj_product_id', productId)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
 async function importCJProductToSupabase(productId) {
   if (!supabase) throw new Error('Supplier sync is not configured. Add Supabase to the admin environment before importing CJ products.')
   if (!getCJConfig().configured) {
@@ -358,123 +391,90 @@ async function importCJProductToSupabase(productId) {
   if (!productDetail || typeof productDetail !== 'object' || !productDetail.pid) {
     throw new Error('CJ did not return product details for the requested product ID.')
   }
-  const inventoryResponse = await getProductInventory({ productId })
+  const [variantResponse, inventoryResponse] = await Promise.all([
+    getProductVariants({ productId }),
+    getProductInventory({ productId }),
+  ])
+  const variants = getCJVariantRecords(variantResponse)
   const inventory = normalizeCJInventoryResponse(inventoryResponse)
-  const payload = buildCJProductImportPayload(productDetail, [], inventory)
+  const payload = buildCJProductImportPayload(productDetail, variants, inventory)
+  if (!payload.cjProductId) throw new Error('CJ product details did not include a stable supplier product ID.')
 
-  const { data, error } = await supabase
-    .from('cj_products')
-    .upsert({
-      cj_product_id: payload.cjProductId,
-      name: payload.name,
-      description: payload.description,
-      category: payload.category,
-      sku: payload.sku,
-      price: payload.price,
-      images: payload.images,
-      variants: payload.variants,
+  const now = new Date().toISOString()
+  const existing = await getProductEditorRow(payload.cjProductId)
+  const supplierData = {
+    product: productDetail,
+    variants: variants,
+    inventory: inventoryResponse,
+  }
+  const supplierFields = {
+    name: payload.name,
+    description: payload.description,
+    category: payload.category,
+    sku: payload.sku,
+    price: payload.price,
+    images: payload.images,
+    variants: payload.variants,
+    inventory: payload.inventory,
+    supplier_data: supplierData,
+    updated_at: now,
+  }
+  let data
+
+  if (existing) {
+    const { error } = await supabase
+      .from('cj_products')
+      .update(supplierFields)
+      .eq('cj_product_id', payload.cjProductId)
+    if (error) throw error
+    data = await getProductEditorRow(payload.cjProductId)
+    await writeProductEditorHistory(payload.cjProductId, 'SUPPLIER_REFRESHED', {
+      inventory: existing.inventory,
+      variants: existing.variants,
+    }, {
       inventory: payload.inventory,
-      is_active: payload.isActive,
-      source: payload.source,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'cj_product_id' })
-    .select()
-    .single()
-
-  if (error) throw error
-
-  const { error: catalogDraftError } = await supabase
-    .from('products')
-    .upsert({
-      id: payload.cjProductId,
-      sku: payload.sku,
-      name: payload.name,
-      category: payload.category,
-      price_cents: 0,
-      stock: 0,
-      image: payload.images[0] || null,
-      is_active: false,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'id', ignoreDuplicates: true })
-
-  if (catalogDraftError) throw catalogDraftError
+      variants: payload.variants,
+    })
+  } else {
+    const editorContent = createProductEditorContent(payload)
+    const { data: inserted, error } = await supabase
+      .from('cj_products')
+      .insert({
+        cj_product_id: payload.cjProductId,
+        public_product_id: randomUUID(),
+        ...supplierFields,
+        original_data: supplierData,
+        editor_content: editorContent,
+        editor_status: 'QUEUED',
+        is_active: false,
+        source: 'cj',
+      })
+      .select()
+      .single()
+    if (error) throw error
+    data = inserted
+    await writeProductEditorHistory(payload.cjProductId, 'IMPORTED', {}, {
+      original_data: supplierData,
+      editor_status: 'QUEUED',
+    })
+  }
 
   await supabase.from('sync_logs').insert({
     entity_type: 'cj_product',
     entity_id: payload.cjProductId,
     status: 'success',
-    message: 'CJ product import synchronized to Supabase from the private admin dashboard.',
+    message: existing
+      ? 'CJ supplier information refreshed without replacing product editor content.'
+      : 'CJ product added to the private Product Editor queue.',
     payload: {
       productId: payload.cjProductId,
-      importedAt: new Date().toISOString(),
+      importedAt: now,
       supplierCategory: productDetail.categoryName || null,
       morrowHouseCategory: payload.category,
     },
   })
 
   return data || payload
-}
-
-async function approveCJProduct(productId, retailPrice, stock) {
-  if (!supabase) throw new Error('Supplier sync is not configured. Add Supabase to the admin environment before approving CJ products.')
-  if (!Number.isFinite(retailPrice) || retailPrice <= 0 || retailPrice > 999999) {
-    throw new Error('Enter a Morrow House retail price greater than $0 and no more than $999,999 before publishing.')
-  }
-  if (!Number.isInteger(stock) || stock < 1 || stock > 9999) {
-    throw new Error('Enter a verified stock quantity between 1 and 9999 before publishing.')
-  }
-
-  const { data: supplierProduct, error: fetchError } = await supabase
-    .from('cj_products')
-    .select('*')
-    .eq('cj_product_id', productId)
-    .single()
-
-  if (fetchError) throw fetchError
-  if (!supplierProduct) throw new Error('CJ product not found.')
-
-  const imageCandidates = Array.isArray(supplierProduct.images) ? supplierProduct.images : []
-  const firstImage = imageCandidates.find((candidate) => typeof candidate === 'string' && candidate.trim()) || supplierProduct.image || ''
-
-  const approvedProduct = {
-    id: String(supplierProduct.cj_product_id),
-    sku: supplierProduct.sku ?? '',
-    name: supplierProduct.name ?? 'Untitled product',
-    category: supplierProduct.category ?? 'Uncategorized',
-    price_cents: Math.round(retailPrice * 100),
-    stock,
-    image: firstImage,
-    is_active: true,
-    updated_at: new Date().toISOString(),
-  }
-
-  const { data, error } = await supabase
-    .from('products')
-    .upsert(approvedProduct, { onConflict: 'id' })
-    .select()
-    .single()
-
-  if (error) throw error
-
-  const { error: supplierUpdateError } = await supabase
-    .from('cj_products')
-    .update({ is_active: true, updated_at: new Date().toISOString() })
-    .eq('cj_product_id', productId)
-
-  if (supplierUpdateError) throw supplierUpdateError
-
-  await supabase.from('sync_logs').insert({
-    entity_type: 'morrow_house_admin_approval',
-    entity_id: approvedProduct.id,
-    status: 'success',
-    message: 'CJ product approved from the private admin dashboard.',
-    payload: {
-      approvedAt: new Date().toISOString(),
-      sourceProductId: approvedProduct.id,
-    },
-  })
-
-  return normalizeProduct(data || approvedProduct)
 }
 
 async function updateOrderStatus(orderId, status) {
@@ -488,6 +488,146 @@ async function updateOrderStatus(orderId, status) {
   const { data, error } = await supabase.from('orders').update({ status }).eq('id', orderId).select().single()
   if (error) throw error
   return normalizeOrder(data)
+}
+
+function mergeVariantInventory(variants, inventory) {
+  const stockByVariant = new Map((Array.isArray(inventory) ? inventory : []).map((entry) => [String(entry.cjVariantId || ''), Math.max(0, Number(entry.stock) || 0)]))
+  return (Array.isArray(variants) ? variants : []).map((variant) => {
+    const variantId = String(variant.cjVariantId || '')
+    return stockByVariant.has(variantId) ? { ...variant, stock: stockByVariant.get(variantId) } : variant
+  })
+}
+
+async function saveProductEditorContent(productId, content) {
+  const validatedContent = validateProductEditorContent(content)
+  const current = await getProductEditorRow(productId)
+  if (!current) return null
+
+  const nextStatus = ['PUBLISHED', 'ARCHIVED', 'REJECTED', 'QUEUED', 'READY_TO_PUBLISH'].includes(current.editor_status)
+    ? 'EDITING'
+    : current.editor_status
+  if (current.editor_status === 'PUBLISHED') {
+    const { error: storefrontError } = await supabase.from('products').update({ is_active: false }).eq('id', current.public_product_id)
+    if (storefrontError) throw storefrontError
+  }
+
+  const { data, error } = await supabase
+    .from('cj_products')
+    .update({
+      editor_content: validatedContent,
+      editor_status: nextStatus === 'READY_TO_PUBLISH' ? 'EDITING' : nextStatus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('cj_product_id', productId)
+    .select()
+    .single()
+  if (error) throw error
+
+  await writeProductEditorHistory(productId, 'CONTENT_SAVED', {
+    editor_content: current.editor_content || {},
+    editor_status: current.editor_status,
+  }, {
+    editor_content: validatedContent,
+    editor_status: data.editor_status,
+  })
+  return data
+}
+
+async function changeProductEditorStatus(productId, status) {
+  if (!PRODUCT_EDITOR_STATUSES.includes(status) || status === 'PUBLISHED') {
+    throw new Error('Choose a valid product workflow status.')
+  }
+  const current = await getProductEditorRow(productId)
+  if (!current) return null
+  if (status === 'READY_TO_PUBLISH' && !getProductReadiness(current.editor_content, current).ready) {
+    throw new Error('Complete every product readiness check before moving it to Ready to Publish.')
+  }
+
+  if (['QUEUED', 'ARCHIVED', 'REJECTED'].includes(status) || current.editor_status === 'PUBLISHED') {
+    const { error } = await supabase.from('products').update({ is_active: false }).eq('id', current.public_product_id)
+    if (error) throw error
+  }
+
+  const { data, error } = await supabase
+    .from('cj_products')
+    .update({
+      editor_status: status,
+      is_active: status === 'PUBLISHED',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('cj_product_id', productId)
+    .select()
+    .single()
+  if (error) throw error
+
+  await writeProductEditorHistory(productId, 'STATUS_CHANGED', {
+    editor_status: current.editor_status,
+  }, {
+    editor_status: data.editor_status,
+  })
+  return data
+}
+
+async function publishProductEditorProduct(productId) {
+  const current = await getProductEditorRow(productId)
+  if (!current) return null
+  if (current.editor_status !== 'READY_TO_PUBLISH') {
+    throw new Error('Move this product to Ready to Publish after completing its checklist.')
+  }
+  const readiness = getProductReadiness(current.editor_content, current)
+  if (!readiness.ready) throw new Error('Complete every product readiness check before publishing.')
+  const content = validateProductEditorContent(current.editor_content)
+  const publicProduct = buildPublicProductRecord(current, content)
+  publicProduct.updated_at = new Date().toISOString()
+
+  const { error: draftError } = await supabase
+    .from('products')
+    .upsert({ ...publicProduct, is_active: false }, { onConflict: 'id' })
+  if (draftError) throw draftError
+
+  const publishedAt = new Date().toISOString()
+  const { data: updatedEditorProduct, error: publishError } = await supabase
+    .from('cj_products')
+    .update({
+      editor_status: 'PUBLISHED',
+      is_active: true,
+      published_at: publishedAt,
+      published_by: adminActor,
+      updated_at: publishedAt,
+    })
+    .eq('cj_product_id', productId)
+    .eq('editor_status', 'READY_TO_PUBLISH')
+    .select()
+    .single()
+  if (publishError) throw publishError
+
+  const { error: activateError } = await supabase
+    .from('products')
+    .update({ is_active: true, updated_at: publishedAt })
+    .eq('id', current.public_product_id)
+  if (activateError) {
+    await supabase.from('cj_products').update({ editor_status: 'READY_TO_PUBLISH', is_active: false }).eq('cj_product_id', productId)
+    throw activateError
+  }
+
+  await writeProductEditorHistory(productId, 'PUBLISHED', {
+    editor_status: current.editor_status,
+  }, {
+    editor_status: 'PUBLISHED',
+    published_at: publishedAt,
+    published_by: adminActor,
+  })
+  return updatedEditorProduct
+}
+
+function validateUploadedImage(buffer, mimeType) {
+  const signatures = {
+    'image/jpeg': buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff,
+    'image/png': buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+    'image/webp': buffer.length >= 12 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP',
+    'image/avif': buffer.length >= 12 && buffer.toString('ascii', 4, 8) === 'ftyp' && /avif|avis/.test(buffer.toString('ascii', 8, 12)),
+  }
+  return signatures[mimeType] === true
 }
 
 app.get('/api/admin/session', (request, response) => {
@@ -511,6 +651,132 @@ app.post('/api/admin/logout', (_request, response) => {
 })
 
 app.use('/api/admin', requireAdmin)
+
+app.get('/api/admin/product-editor', async (_request, response) => {
+  if (!supabase) return response.status(503).json({ error: 'Product Editor requires the connected Supabase database.' })
+  try {
+    const { data, error } = await supabase
+      .from('cj_products')
+      .select('*')
+      .order('updated_at', { ascending: false })
+    if (error) throw error
+    response.json({
+      products: (data || []).map((product) => ({
+        ...normalizeCJProduct(product),
+        supplierCost: Number(product.price || 0),
+        supplierSku: product.sku || '',
+        originalData: product.original_data || {},
+        supplierData: product.supplier_data || {},
+        publishedAt: product.published_at || null,
+        publishedBy: product.published_by || null,
+        readiness: getProductReadiness(product.editor_content, product),
+      })),
+    })
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : 'Product Editor records could not be loaded.' })
+  }
+})
+
+app.get('/api/admin/product-editor/:productId/history', async (request, response) => {
+  if (!supabase) return response.status(503).json({ error: 'Product Editor requires the connected Supabase database.' })
+  try {
+    const { data, error } = await supabase
+      .from('product_editor_history')
+      .select('id, action, actor, before_data, after_data, created_at')
+      .eq('cj_product_id', request.params.productId)
+      .order('created_at', { ascending: false })
+      .limit(50)
+    if (error) throw error
+    response.json({ history: data || [] })
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : 'Product history could not be loaded.' })
+  }
+})
+
+app.post('/api/admin/product-editor/:productId/images', async (request, response) => {
+  if (!supabase) return response.status(503).json({ error: 'Product image storage requires the connected Supabase database.' })
+  const { base64, mimeType, fileName } = request.body || {}
+  if (typeof base64 !== 'string' || typeof mimeType !== 'string') {
+    return response.status(400).json({ error: 'Choose a supported product image to upload.' })
+  }
+  const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif'])
+  if (!allowedTypes.has(mimeType)) return response.status(400).json({ error: 'Upload a JPEG, PNG, WebP or AVIF image.' })
+  const encoded = base64.replace(/^data:image\/(?:jpeg|png|webp|avif);base64,/i, '')
+  if (!/^[a-zA-Z0-9+/]*={0,2}$/.test(encoded)) return response.status(400).json({ error: 'The image upload is not valid base64 data.' })
+  const image = Buffer.from(encoded, 'base64')
+  if (!image.length || image.length > 10 * 1024 * 1024 || !validateUploadedImage(image, mimeType)) {
+    return response.status(400).json({ error: 'Image must be valid and no larger than 10 MB.' })
+  }
+
+  const productId = String(request.params.productId)
+  try {
+    if (!await getProductEditorRow(productId)) return response.status(404).json({ error: 'Product not found in Product Editor.' })
+    const safeProductId = productId.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100)
+    const extension = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/avif': 'avif' }[mimeType]
+    const path = `${safeProductId}/${Date.now()}-${randomBytes(6).toString('hex')}.${extension}`
+    const { error } = await supabase.storage
+      .from('product-editor-images')
+      .upload(path, image, { contentType: mimeType, upsert: false })
+    if (error) throw error
+    const { data } = supabase.storage.from('product-editor-images').getPublicUrl(path)
+    response.json({ image: { url: data.publicUrl, alt: String(fileName || '').slice(0, 300), source: 'upload' } })
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : 'Product image could not be uploaded.' })
+  }
+})
+
+app.patch('/api/admin/product-editor/:productId', async (request, response) => {
+  if (!supabase) return response.status(503).json({ error: 'Product Editor requires the connected Supabase database.' })
+  try {
+    const product = await saveProductEditorContent(request.params.productId, request.body?.content)
+    if (!product) return response.status(404).json({ error: 'Product not found in Product Editor.' })
+    response.json({ product: normalizeCJProduct(product), readiness: getProductReadiness(product.editor_content, product) })
+  } catch (error) {
+    response.status(400).json({ error: error instanceof Error ? error.message : 'Product edits could not be saved.' })
+  }
+})
+
+app.post('/api/admin/product-editor/:productId/status', async (request, response) => {
+  if (!supabase) return response.status(503).json({ error: 'Product Editor requires the connected Supabase database.' })
+  try {
+    const product = await changeProductEditorStatus(request.params.productId, request.body?.status)
+    if (!product) return response.status(404).json({ error: 'Product not found in Product Editor.' })
+    response.json({ product: normalizeCJProduct(product) })
+  } catch (error) {
+    response.status(400).json({ error: error instanceof Error ? error.message : 'Product status could not be changed.' })
+  }
+})
+
+app.post('/api/admin/product-editor/:productId/publish', async (request, response) => {
+  if (!supabase) return response.status(503).json({ error: 'Product Editor requires the connected Supabase database.' })
+  try {
+    const product = await publishProductEditorProduct(request.params.productId)
+    if (!product) return response.status(404).json({ error: 'Product not found in Product Editor.' })
+    response.json({ product: normalizeCJProduct(product) })
+  } catch (error) {
+    response.status(400).json({ error: error instanceof Error ? error.message : 'Product could not be published.' })
+  }
+})
+
+app.post('/api/admin/product-editor/:productId/history/:historyId/restore', async (request, response) => {
+  if (!supabase) return response.status(503).json({ error: 'Product Editor requires the connected Supabase database.' })
+  try {
+    const { data: history, error } = await supabase
+      .from('product_editor_history')
+      .select('after_data')
+      .eq('id', request.params.historyId)
+      .eq('cj_product_id', request.params.productId)
+      .single()
+    if (error) throw error
+    const content = history?.after_data?.editor_content
+    if (!content) return response.status(400).json({ error: 'This history entry does not contain a restorable product draft.' })
+    const product = await saveProductEditorContent(request.params.productId, content)
+    if (!product) return response.status(404).json({ error: 'Product not found in Product Editor.' })
+    response.json({ product: normalizeCJProduct(product) })
+  } catch (error) {
+    response.status(400).json({ error: error instanceof Error ? error.message : 'Product version could not be restored.' })
+  }
+})
 
 app.get('/api/admin/dashboard', async (_request, response) => {
   const [dashboard, supplierData, syncStatus] = await Promise.all([
@@ -554,27 +820,51 @@ app.post('/api/admin/cj/products/:productId/sync-inventory', async (request, res
 
   const productId = String(request.params.productId || '').trim()
   try {
-    const { data: supplierProduct, error: lookupError } = await supabase
-      .from('cj_products')
-      .select('cj_product_id')
-      .eq('cj_product_id', productId)
-      .single()
-
-    if (lookupError) throw lookupError
+    const supplierProduct = await getProductEditorRow(productId)
     if (!supplierProduct) return response.status(404).json({ error: 'Imported CJ product not found.' })
 
     const inventoryResponse = await getProductInventory({ productId })
     const inventory = normalizeCJInventoryResponse(inventoryResponse)
     if (!inventory.length) throw new Error('CJ returned no inventory records for this product.')
+    const editorContent = supplierProduct.editor_content && typeof supplierProduct.editor_content === 'object'
+      ? supplierProduct.editor_content
+      : createProductEditorContent(supplierProduct)
+    const beforeVariants = Array.isArray(editorContent.variants) ? editorContent.variants : []
+    const updatedContent = {
+      ...editorContent,
+      variants: mergeVariantInventory(beforeVariants, inventory),
+    }
 
     const { data, error } = await supabase
       .from('cj_products')
-      .update({ inventory, updated_at: new Date().toISOString() })
+      .update({
+        inventory,
+        variants: inventory,
+        editor_content: updatedContent,
+        updated_at: new Date().toISOString(),
+      })
       .eq('cj_product_id', productId)
       .select()
       .single()
 
     if (error) throw error
+    if (supplierProduct.editor_status === 'PUBLISHED') {
+      const publicProduct = buildPublicProductRecord({ ...supplierProduct, inventory }, updatedContent)
+      const { error: storefrontError } = await supabase
+        .from('products')
+        .update({
+          stock: publicProduct.stock,
+          public_data: publicProduct.public_data,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', supplierProduct.public_product_id)
+      if (storefrontError) throw storefrontError
+    }
+    await writeProductEditorHistory(productId, 'INVENTORY_SYNCED', {
+      inventory: supplierProduct.inventory,
+    }, {
+      inventory,
+    })
     response.json({ ok: true, product: normalizeCJProduct(data) })
   } catch (error) {
     response.status(500).json({ error: error instanceof Error ? error.message : 'CJ inventory could not be refreshed.' })
@@ -601,12 +891,7 @@ app.get('/api/admin/cj/sync-status', async (_request, response) => {
 })
 
 app.post('/api/admin/cj/products/:productId/approve', async (request, response) => {
-  try {
-    const product = await approveCJProduct(request.params.productId, Number(request.body?.retailPrice), Number(request.body?.stock))
-    response.json({ ok: true, product })
-  } catch (error) {
-    response.status(500).json({ error: error.message || 'The CJ product could not be approved.' })
-  }
+  response.status(410).json({ error: 'Direct supplier approval is disabled. Edit the product, complete its checklist, and publish it from Product Editor.' })
 })
 
 app.post('/api/admin/cj/products/approve-all', async (_request, response) => {

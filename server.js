@@ -439,13 +439,22 @@ async function getStoreProducts() {
   try {
     const { data, error } = await supabase
       .from('products')
-      .select('id,name,category,price_cents,stock,image,is_active')
+      .select('id,name,category,price_cents,stock,image,is_active,public_detail,public_data')
       .eq('is_active', true)
       .order('name', { ascending: true })
     if (error) throw error
-    return Array.isArray(data) ? data : []
+    const activeProducts = Array.isArray(data) ? data : []
+    if (!activeProducts.length) return activeProducts
+
+    const { data: supplierProducts, error: supplierError } = await supabase
+      .from('cj_products')
+      .select('public_product_id, editor_status')
+      .in('public_product_id', activeProducts.map((product) => String(product.id)))
+    if (supplierError) throw supplierError
+    const supplierStatuses = new Map((supplierProducts || []).map((product) => [String(product.public_product_id), product.editor_status]))
+    return activeProducts.filter((product) => !supplierStatuses.has(String(product.id)) || supplierStatuses.get(String(product.id)) === 'PUBLISHED')
   } catch (err) {
-    console.warn('Supabase products fetch failed, using fallback catalog:', err.message || err)
+    console.error('Public product query failed:', err.message || err)
     return fallbackProducts
   }
 }
@@ -454,28 +463,21 @@ app.get('/api/products', async (_request, response) => {
   response.set('Cache-Control', 'no-store')
   try {
     const liveProducts = await getStoreProducts()
-    const supplierCopy = new Map()
-    if (liveProducts.length) {
-      const { data: supplierProducts, error: supplierError } = await supabase
-        .from('cj_products')
-        .select('cj_product_id, description')
-        .in('cj_product_id', liveProducts.map((product) => String(product.id)))
-      if (!supplierError) {
-        for (const supplierProduct of supplierProducts || []) {
-          supplierCopy.set(String(supplierProduct.cj_product_id), supplierProduct.description)
-        }
-      }
-    }
-
     response.json({ products: liveProducts.map((product) => ({
       id: String(product.id),
       name: summarizeProductName(product.name),
       category: product.category,
       price: Number(product.price_cents) / 100,
-      detail: summarizeProductText(supplierCopy.get(String(product.id))) || `${product.category} · thoughtfully chosen`,
+      detail: summarizeProductText(product.public_detail) || `${product.category} · thoughtfully chosen`,
+      description: String(product.public_detail || ''),
       badge: 'New to the collection',
-      searchTerms: `${product.name} ${product.category}`,
+      searchTerms: `${product.name} ${product.category} ${(product.public_data?.seo?.keywords || []).join(' ')}`,
       image: product.image || 'photo-1524758631624-e2822e304c36',
+      images: Array.isArray(product.public_data?.images) ? product.public_data.images : [],
+      specifications: product.public_data?.specifications || {},
+      variants: Array.isArray(product.public_data?.variants) ? product.public_data.variants : [],
+      seo: product.public_data?.seo || {},
+      stock: Math.max(0, Number(product.stock) || 0),
     })) })
   } catch {
     response.status(503).json({ error: 'The shop catalog could not be loaded.' })
@@ -652,7 +654,7 @@ const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY || fallbackPaystackKey
 app.post('/api/paystack/initialize', async (request, response) => {
   response.set('Cache-Control', 'no-store');
   try {
-    const { customerEmail, customerName, items, amountUsd, amountNgn, callbackUrl } = request.body || {};
+    const { customerEmail, customerName, items, callbackUrl } = request.body || {};
 
     if (!customerEmail || !items || !Array.isArray(items) || items.length === 0) {
       return response.status(400).json({ error: 'Valid customer email and items are required.' });
@@ -666,18 +668,39 @@ app.post('/api/paystack/initialize', async (request, response) => {
     const catalogMap = new Map(availableProducts.map(p => [String(p.id), p]));
 
     let calculatedUsdSubtotal = 0;
+    const verifiedItems = []
     for (const item of items) {
       const prod = catalogMap.get(String(item.productId));
       if (!prod) return response.status(400).json({ error: 'Invalid product in order.' });
-      const qty = Number(item.quantity) || 1;
-      calculatedUsdSubtotal += (Number(prod.price_cents) / 100) * qty;
+      const qty = Number(item.quantity);
+      if (!Number.isInteger(qty) || qty < 1 || qty > 999) {
+        return response.status(400).json({ error: 'Each item quantity must be a whole number between 1 and 999.' });
+      }
+
+      const variantId = typeof item.variantId === 'string' ? item.variantId : '';
+      const variant = variantId
+        ? (Array.isArray(prod.public_data?.variants) ? prod.public_data.variants : []).find((entry) => String(entry.id) === variantId)
+        : null;
+      if (variantId && !variant) return response.status(400).json({ error: 'The selected product option is no longer available.' });
+      const availableStock = variant ? Number(variant.stock) : Number(prod.stock);
+      if (!Number.isFinite(availableStock) || qty > availableStock) {
+        return response.status(400).json({ error: `${prod.name} does not have enough stock for that quantity.` });
+      }
+      const unitPriceCents = variant
+        ? Math.round(Number(variant.price) * 100)
+        : Number(prod.price_cents);
+      if (!Number.isInteger(unitPriceCents) || unitPriceCents < 1) {
+        return response.status(400).json({ error: `${prod.name} has an invalid selling price.` });
+      }
+      calculatedUsdSubtotal += (unitPriceCents / 100) * qty;
+      verifiedItems.push({ productId: String(prod.id), ...(variant ? { variantId } : {}), quantity: qty })
     }
 
     const freeShipping = calculatedUsdSubtotal >= 150;
     const finalUsd = calculatedUsdSubtotal + (freeShipping ? 0 : 15);
 
     const ngnRate = 1480;
-    const totalNgn = amountNgn && amountNgn > 0 ? Number(amountNgn) : Math.round(finalUsd * ngnRate);
+    const totalNgn = Math.round(finalUsd * ngnRate);
     const amountInKobo = Math.round(totalNgn * 100);
 
     const orderId = 'MH-' + Math.floor(10000 + Math.random() * 89999);
@@ -705,7 +728,7 @@ app.post('/api/paystack/initialize', async (request, response) => {
           customerEmail,
           amountUsd: finalUsd,
           amountNgn: totalNgn,
-          items,
+          items: verifiedItems,
         },
         channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer'],
       }),

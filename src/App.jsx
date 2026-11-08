@@ -89,6 +89,18 @@ function getSavedCart() {
   }
 }
 
+function getCartKey(productId, variantId = '') {
+  return variantId ? `${productId}::variant:${variantId}` : String(productId)
+}
+
+function getCartLineKeyParts(cartKey) {
+  const marker = '::variant:'
+  const markerIndex = cartKey.lastIndexOf(marker)
+  return markerIndex < 0
+    ? { productId: cartKey, variantId: '' }
+    : { productId: cartKey.slice(0, markerIndex), variantId: cartKey.slice(markerIndex + marker.length) }
+}
+
 function getSavedCurrency() {
   try {
     return window.localStorage.getItem(manualCurrencyStorageKey) || 'USD'
@@ -243,7 +255,7 @@ function DesignEnthusiast() {
   )
 }
 
-function CartPage({ cartProducts, cartItems, cartCount, subtotal, changeQuantity, onNavigate }) {
+function CartPage({ cartProducts, cartCount, subtotal, changeQuantity, onNavigate }) {
   const reduceMotion = useReducedMotion()
   const { currency, exchangeRate } = useCurrency()
   const checkoutNotice = new URLSearchParams(window.location.search).get('payment') === 'cancelled'
@@ -276,22 +288,23 @@ function CartPage({ cartProducts, cartItems, cartCount, subtotal, changeQuantity
             <div className="cart-items-heading"><span>Item</span><span>Total</span></div>
             <AnimatePresence initial={false}>
               {cartProducts.map((product) => (
-                <motion.article className="cart-page-item" key={product.id} layout initial={reduceMotion ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.24 }}>
+                <motion.article className="cart-page-item" key={product.cartKey} layout initial={reduceMotion ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.24 }}>
                   <img src={imageUrl(product.image, 360)} alt={`${product.name}`} />
                   <div className="cart-page-item-info">
                     <span className="cart-item-category">{product.category}</span>
                     <h2>{product.name}</h2>
-                    <p>{product.detail}</p>
+                    {product.variant && <p className="cart-item-variant">{product.variant.name}</p>}
+                    <p>{product.variant ? `${product.variant.name} · ` : ''}{product.detail}</p>
                     <div className="cart-page-item-controls">
                       <div className="quantity-control" aria-label={`Quantity for ${product.name}`}>
-                        <button type="button" onClick={() => changeQuantity(product.id, -1)} aria-label={`Remove one ${product.name}`}><Minus size={13} /></button>
-                        <span>{cartItems[product.id]}</span>
-                        <button type="button" onClick={() => changeQuantity(product.id, 1)} aria-label={`Add one ${product.name}`}><Plus size={13} /></button>
+                        <button type="button" onClick={() => changeQuantity(product.cartKey, -1)} aria-label={`Remove one ${product.name}`}><Minus size={13} /></button>
+                        <span>{product.quantity}</span>
+                        <button type="button" onClick={() => changeQuantity(product.cartKey, 1)} aria-label={`Add one ${product.name}`}><Plus size={13} /></button>
                       </div>
-                      <button type="button" className="remove-item" onClick={() => changeQuantity(product.id, -cartItems[product.id])} aria-label={`Remove ${product.name} from bag`}><Trash size={15} /><span>Remove</span></button>
+                      <button type="button" className="remove-item" onClick={() => changeQuantity(product.cartKey, -product.quantity)} aria-label={`Remove ${product.name} from bag`}><Trash size={15} /><span>Remove</span></button>
                     </div>
                   </div>
-                  <strong className="cart-page-item-total">{formatPrice(product.price * cartItems[product.id], currency, exchangeRate)}</strong>
+                  <strong className="cart-page-item-total">{formatPrice(product.price * product.quantity, currency, exchangeRate)}</strong>
                 </motion.article>
               ))}
             </AnimatePresence>
@@ -432,12 +445,12 @@ function ProductCollectionShelves({ products, onNavigate, onSelectCategory, favo
   </div>
 }
 
-function AddToBagButton({ product, className, onAdd }) {
+function AddToBagButton({ product, variantId, className, onAdd, disabled = false }) {
   const reduceMotion = useReducedMotion()
   const [added, setAdded] = useState(false)
 
   function handleAdd() {
-    onAdd(product.id)
+    onAdd(product.id, variantId)
     setAdded(true)
   }
 
@@ -446,6 +459,7 @@ function AddToBagButton({ product, className, onAdd }) {
       type="button"
       className={`${className}${added ? ' is-added' : ''}`}
       onClick={handleAdd}
+      disabled={disabled}
       aria-label={added ? `${product.name} added to bag` : `Add ${product.name} to bag`}
       whileTap={reduceMotion ? undefined : { scale: 0.96 }}
     >
@@ -564,22 +578,36 @@ function ShopPage({ products, activeCategory, setActiveCategory, searchTerm, set
 function ProductPage({ product, products, onNavigate, onAdd }) {
   const reduceMotion = useReducedMotion()
   const { currency, exchangeRate } = useCurrency()
+  const [selectedVariantId, setSelectedVariantId] = useState('')
+  const [selectedImage, setSelectedImage] = useState('')
+  useEffect(() => {
+    setSelectedVariantId(product?.variants?.[0]?.id || '')
+    setSelectedImage(product?.image || '')
+  }, [product?.id])
   if (!product) return <NotFoundPage onNavigate={onNavigate} />
   const relatedProducts = products.filter((item) => item.id !== product.id)
+  const variants = Array.isArray(product.variants) ? product.variants : []
+  const selectedVariant = variants.find((variant) => variant.id === selectedVariantId)
+  const images = Array.isArray(product.images) && product.images.length
+    ? product.images
+    : [{ url: product.image, alt: `${product.name} styled in a home` }]
+  const primaryImage = images.find((image) => image.url === selectedImage) || images[0]
+  const displayedPrice = Number(selectedVariant?.price || product.price)
+  const isAvailable = selectedVariant ? Number(selectedVariant.stock) > 0 : Number(product.stock ?? 1) > 0
 
   return (
     <motion.section className="product-page section-wrap" aria-labelledby="product-title" initial={reduceMotion ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
       <nav className="cart-breadcrumb" aria-label="Breadcrumb"><a href="/" onClick={(event) => onNavigate(event, '/')}>Home</a><span aria-hidden="true">/</span><a href="/shop" onClick={(event) => onNavigate(event, '/shop')}>Shop</a><span aria-hidden="true">/</span><span aria-current="page">{product.name}</span></nav>
       <div className="product-detail-layout">
-        <motion.div className="product-detail-image" initial={reduceMotion ? false : { opacity: 0, scale: 1.02 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.55 }}><img src={imageUrl(product.image, 1400)} alt={`${product.name} styled in a home`} /></motion.div>
-        <div className="product-detail-copy"><span className="overline">{product.category} · MORROW HOUSE</span><h1 id="product-title">{product.name}</h1><span className="product-detail-price">{formatPrice(product.price, currency, exchangeRate)}</span><p className="product-detail-description">{product.detail}. A thoughtful piece, chosen to feel at home from the very first day.</p><p className="product-detail-badge">{product.badge}</p><AddToBagButton product={product} onAdd={onAdd} className="checkout-button product-detail-add-button" /><a className="product-detail-cart-link" href="/cart" onClick={(event) => onNavigate(event, '/cart')}>View your bag <ArrowRight size={15} /></a><div className="product-service-notes"><a href="/shipping" onClick={(event) => onNavigate(event, '/shipping')}>Complimentary shipping over $150</a><a href="/refunds" onClick={(event) => onNavigate(event, '/refunds')}>30 days to make yourself at home</a></div></div>
+        <div className="product-detail-gallery"><motion.div className="product-detail-image" initial={reduceMotion ? false : { opacity: 0, scale: 1.02 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.55 }}><img src={imageUrl(primaryImage.url, 1400)} alt={primaryImage.alt || `${product.name} styled in a home`} /></motion.div>{images.length > 1 && <div className="product-detail-thumbnails" aria-label="Product images">{images.map((image, index) => <button key={`${image.url}-${index}`} type="button" className={image.url === primaryImage.url ? 'is-active' : ''} onClick={() => setSelectedImage(image.url)} aria-label={`Show product image ${index + 1}`}><img src={imageUrl(image.url, 200)} alt="" /></button>)}</div>}</div>
+        <div className="product-detail-copy"><span className="overline">{product.category} · MORROW HOUSE</span><h1 id="product-title">{product.name}</h1><span className="product-detail-price">{formatPrice(displayedPrice, currency, exchangeRate)}</span><p className="product-detail-description">{product.detail}</p>{variants.length > 0 && <label className="product-variant-picker"><span>Choose an option</span><select value={selectedVariantId} onChange={(event) => setSelectedVariantId(event.target.value)}>{variants.map((variant) => <option key={variant.id} value={variant.id} disabled={Number(variant.stock) < 1}>{variant.name}{variant.color ? ` · ${variant.color}` : ''}{variant.size ? ` · ${variant.size}` : ''}{Number(variant.stock) < 1 ? ' · Unavailable' : ''}</option>)}</select></label>}<p className="product-detail-badge">{isAvailable ? product.badge : 'Currently unavailable'}</p><AddToBagButton product={product} variantId={selectedVariant?.id} onAdd={onAdd} disabled={!isAvailable} className="checkout-button product-detail-add-button" /><a className="product-detail-cart-link" href="/cart" onClick={(event) => onNavigate(event, '/cart')}>View your bag <ArrowRight size={15} /></a><div className="product-service-notes"><a href="/shipping" onClick={(event) => onNavigate(event, '/shipping')}>Complimentary shipping over $150</a><a href="/refunds" onClick={(event) => onNavigate(event, '/refunds')}>30 days to make yourself at home</a></div>{Object.keys(product.specifications || {}).length > 0 && <dl className="product-specification-list">{Object.entries(product.specifications).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>}</div>
       </div>
       <section className="related-products" aria-labelledby="related-products-title"><div className="section-intro"><div><span className="overline">A FEW GOOD COMPANIONS</span><h2 id="related-products-title">Make room for more.</h2></div><a className="text-link" href="/shop" onClick={(event) => onNavigate(event, '/shop')}>Shop everything <ArrowRight size={15} /></a></div><div className="product-grid">{relatedProducts.slice(0, 3).map((item, index) => <ProductTile key={item.id} product={item} index={index} onNavigate={onNavigate} />)}</div></section>
     </motion.section>
   )
 }
 
-function CheckoutPage({ cartProducts, cartItems, cartCount, subtotal, onNavigate }) {
+function CheckoutPage({ cartProducts, cartCount, subtotal, onNavigate }) {
   const { currency, exchangeRate, rates } = useCurrency()
   const [checkoutPending, setCheckoutPending] = useState(false)
   const [checkoutNotice, setCheckoutNotice] = useState('')
@@ -609,7 +637,7 @@ function CheckoutPage({ cartProducts, cartItems, cartCount, subtotal, onNavigate
         body: JSON.stringify({
           customerEmail: customerEmail.trim(),
           customerName: customerName.trim() || 'Morrow House Client',
-          items: cartProducts.map((product) => ({ productId: product.id, quantity: cartItems[product.id] })),
+          items: cartProducts.map((product) => ({ productId: product.id, variantId: product.variantId || undefined, quantity: product.quantity })),
           amountUsd: finalTotalUsd,
           amountNgn: totalNgn,
         }),
@@ -671,14 +699,15 @@ function CheckoutPage({ cartProducts, cartItems, cartCount, subtotal, onNavigate
           <section className="checkout-review" aria-label="Order items">
             <h2>Your pieces <span>{cartCount}</span></h2>
             {cartProducts.map((product) => (
-              <article className="checkout-review-item" key={product.id}>
+              <article className="checkout-review-item" key={product.cartKey}>
                 <img src={imageUrl(product.image, 260)} alt="" />
                 <div>
                   <strong>{product.name}</strong>
+                  {product.variant && <span>{product.variant.name}</span>}
                   <span>{product.detail}</span>
-                  <span>Qty {cartItems[product.id]}</span>
+                  <span>Qty {product.quantity}</span>
                 </div>
-                <b>{formatPrice(product.price * cartItems[product.id], currency, exchangeRate)}</b>
+                <b>{formatPrice(product.price * product.quantity, currency, exchangeRate)}</b>
               </article>
             ))}
             <a className="continue-shopping" href="/cart" onClick={(event) => onNavigate(event, '/cart')}>Edit your bag <ArrowRight size={15} /></a>
@@ -1047,19 +1076,36 @@ function App() {
       .includes(searchTerm.trim().toLowerCase())
     return matchesCategory && matchesSearch
   })
-  const cartCount = Object.values(cartItems).reduce((total, quantity) => total + quantity, 0)
-  const subtotal = products.reduce((total, product) => total + product.price * (cartItems[product.id] || 0), 0)
-  const cartProducts = products.filter((product) => cartItems[product.id])
+  const cartProducts = Object.entries(cartItems).flatMap(([cartKey, quantity]) => {
+    const { productId, variantId } = getCartLineKeyParts(cartKey)
+    const product = products.find((item) => item.id === productId)
+    if (!product || !Number(quantity)) return []
+    const variant = product.variants?.find((item) => item.id === variantId)
+    const price = Number(variant?.price || product.price)
+    return [{
+      ...product,
+      cartKey,
+      quantity: Number(quantity),
+      variantId,
+      variant: variant || null,
+      price,
+      image: variant?.image || product.image,
+    }]
+  })
+  const cartCount = cartProducts.reduce((total, product) => total + product.quantity, 0)
+  const subtotal = cartProducts.reduce((total, product) => total + product.price * product.quantity, 0)
 
-  function changeQuantity(productId, change) {
+  function changeQuantity(cartKey, change) {
     setCartItems((items) => {
-      const quantity = Math.max(0, (items[productId] || 0) + change)
-      return { ...items, [productId]: quantity }
+      const quantity = Math.max(0, (items[cartKey] || 0) + change)
+      const next = { ...items, [cartKey]: quantity }
+      if (!quantity) delete next[cartKey]
+      return next
     })
   }
 
-  function handleAddToBag(productId) {
-    changeQuantity(productId, 1)
+  function handleAddToBag(productId, variantId) {
+    changeQuantity(getCartKey(productId, variantId), 1)
     const productName = products.find((product) => product.id === productId)?.name || 'Item'
     bagNoticeSequence.current += 1
     setBagNotice({ id: bagNoticeSequence.current, productName })

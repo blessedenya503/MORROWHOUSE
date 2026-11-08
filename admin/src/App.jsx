@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowRight, ArrowUpRight, Bell, ChartBar, Check, CircleNotch, Clock, Cube, House, LockKey, MagnifyingGlass, Minus, Package, Plus, SignOut, SquaresFour, Trash, TrendUp, Truck, WarningCircle, X } from '@phosphor-icons/react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowDown, ArrowRight, ArrowUpRight, Bell, ChartBar, Check, CircleNotch, Clock, Cube, House, LockKey, MagnifyingGlass, Minus, Package, PencilSimple, Plus, SignOut, SquaresFour, Trash, TrendUp, Truck, WarningCircle, X } from '@phosphor-icons/react'
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'framer-motion'
 import { formatCurrency, imageUrl } from './format.js'
+import ProductEditor from './ProductEditor.jsx'
 
 const navigation = [
   { id: 'overview', label: 'Overview', icon: SquaresFour },
   { id: 'orders', label: 'Orders', icon: Package },
   { id: 'inventory', label: 'Inventory', icon: Cube },
-  { id: 'supplier', label: 'Supplier', icon: ArrowUpRight },
+  { id: 'product-editor', label: 'Product editor', icon: PencilSimple },
 ]
 
 async function adminRequest(path, options = {}) {
@@ -264,13 +265,10 @@ function SupplierTable({ products, syncSummary = {}, onApprove, onImportProduct,
   )
 }
 
-function Dashboard({ data, onReload, onLogout, onUpdateStock, onDeleteProduct, onUpdateOrder, onApproveSupplier, onImportSupplier, onSearchSupplier, onSyncSupplierStock, message, error, pending }) {
+function Dashboard({ data, onReload, onLogout, onUpdateStock, onDeleteProduct, onUpdateOrder, onImportSupplier, onSearchSupplier, onSyncSupplierStock, onSaveEditorProduct, onChangeEditorStatus, onPublishEditorProduct, onUploadEditorImage, onGetProductHistory, onRestoreProductHistory, message, error, pending }) {
   const [activeView, setActiveView] = useState('overview')
   const [search, setSearch] = useState('')
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false)
-  const [quickImportJump, setQuickImportJump] = useState(0)
-  const supplierImportPanelRef = useRef(null)
-  const supplierImportInputRef = useRef(null)
   const lowStock = data.products.filter((product) => product.stock <= product.reorderAt)
   const filteredOrders = useMemo(() => data.orders.filter((order) => `${order.id} ${order.customer} ${order.email} ${order.status}`.toLowerCase().includes(search.trim().toLowerCase())), [data.orders, search])
   const filteredProducts = useMemo(() => data.products.filter((product) => `${product.name} ${product.category} ${product.sku}`.toLowerCase().includes(search.trim().toLowerCase())), [data.products, search])
@@ -282,15 +280,6 @@ function Dashboard({ data, onReload, onLogout, onUpdateStock, onDeleteProduct, o
   const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()
   const updated = new Date(data.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 
-  useEffect(() => {
-    if (activeView !== 'supplier' || quickImportJump === 0) return undefined
-    const frame = window.requestAnimationFrame(() => {
-      supplierImportPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      supplierImportInputRef.current?.focus({ preventScroll: true })
-    })
-    return () => window.cancelAnimationFrame(frame)
-  }, [activeView, quickImportJump])
-
   return (
     <div className="admin-shell">
       <aside className={`admin-sidebar ${mobileNavigationOpen ? 'is-open' : ''}`}>
@@ -301,11 +290,11 @@ function Dashboard({ data, onReload, onLogout, onUpdateStock, onDeleteProduct, o
       </aside>
 
       <div className="admin-main">
-        <header className="admin-topbar"><button type="button" className="mobile-menu-button" aria-label={mobileNavigationOpen ? 'Close navigation' : 'Open navigation'} onClick={() => setMobileNavigationOpen((open) => !open)}>{mobileNavigationOpen ? <X size={19} /> : <SquaresFour size={19} />}</button><div className="topbar-location"><House size={14} /><span>/</span><strong>{title}</strong></div><div className="topbar-actions"><label className="admin-search"><MagnifyingGlass size={16} /><input aria-label={`Search ${activeView === 'inventory' ? 'inventory' : 'orders'}`} placeholder={activeView === 'inventory' ? 'Search products' : 'Search orders'} value={search} onChange={(event) => setSearch(event.target.value)} /></label><button type="button" className="topbar-icon" title="Last refreshed" aria-label={`Last refreshed at ${updated}`} onClick={onReload}><Clock size={18} /></button><button type="button" className="topbar-icon notification-icon" title="Low-stock products" aria-label={`${lowStock.length} low-stock products`} onClick={() => setActiveView('inventory')}><Bell size={18} />{lowStock.length > 0 && <i />}</button><span className="topbar-divider" /><span className="owner-chip"><span>MH</span>Owner</span></div></header>
+        <header className="admin-topbar"><button type="button" className="mobile-menu-button" aria-label={mobileNavigationOpen ? 'Close navigation' : 'Open navigation'} onClick={() => setMobileNavigationOpen((open) => !open)}>{mobileNavigationOpen ? <X size={19} /> : <SquaresFour size={19} />}</button><div className="topbar-location"><House size={14} /><span>/</span><strong>{title}</strong></div><div className="topbar-actions"><label className="admin-search"><MagnifyingGlass size={16} /><input aria-label={`Search ${activeView === 'inventory' || activeView === 'product-editor' ? 'products' : 'orders'}`} placeholder={activeView === 'inventory' || activeView === 'product-editor' ? 'Search products' : 'Search orders'} value={search} onChange={(event) => setSearch(event.target.value)} /></label><button type="button" className="topbar-icon" title="Last refreshed" aria-label={`Last refreshed at ${updated}`} onClick={onReload}><Clock size={18} /></button><button type="button" className="topbar-icon notification-icon" title="Low-stock products" aria-label={`${lowStock.length} low-stock products`} onClick={() => setActiveView('inventory')}><Bell size={18} />{lowStock.length > 0 && <i />}</button><span className="topbar-divider" /><span className="owner-chip"><span>MH</span>Owner</span></div></header>
 
         <main className="dashboard-content">
           <PreviewBanner mode={data.mode} />
-          <div className="page-heading"><div><span className="eyebrow">{activeView === 'overview' ? todayLabel : 'MORROW HOUSE · OPERATIONS'}</span><h1>{activeView === 'overview' ? <>A good day to<br /><em>make things happen.</em></> : title}</h1><p>{activeView === 'overview' ? 'Here’s the shape of the shop this week.' : activeView === 'orders' ? 'Stay close to every good thing on its way.' : 'Keep every considered piece accounted for.'}</p></div><div className="page-heading-actions"><button type="button" className="quick-import-button" onClick={() => { setActiveView('supplier'); setMobileNavigationOpen(false); setSearch(''); setQuickImportJump((count) => count + 1) }}><ArrowDown size={15} />CJ Import</button><button type="button" className="refresh-button" onClick={onReload} disabled={pending}><CircleNotch className={pending ? 'spin' : ''} size={16} />Refresh</button></div></div>
+          <div className="page-heading"><div><span className="eyebrow">{activeView === 'overview' ? todayLabel : 'MORROW HOUSE · OPERATIONS'}</span><h1>{activeView === 'overview' ? <>A good day to<br /><em>make things happen.</em></> : title}</h1><p>{activeView === 'overview' ? 'Here’s the shape of the shop this week.' : activeView === 'orders' ? 'Stay close to every good thing on its way.' : activeView === 'product-editor' ? 'Prepare every supplier import before it reaches the storefront.' : 'Keep every considered piece accounted for.'}</p></div><div className="page-heading-actions"><button type="button" className="quick-import-button" onClick={() => { setActiveView('product-editor'); setMobileNavigationOpen(false); setSearch('') }}><ArrowDown size={15} />CJ Import</button><button type="button" className="refresh-button" onClick={onReload} disabled={pending}><CircleNotch className={pending ? 'spin' : ''} size={16} />Refresh</button></div></div>
 
           {message && <div className="admin-message" role="status"><Check size={15} />{message}</div>}
           {error && <div className="admin-message admin-error" role="alert"><WarningCircle size={15} />{error}</div>}
@@ -322,7 +311,7 @@ function Dashboard({ data, onReload, onLogout, onUpdateStock, onDeleteProduct, o
 
           {activeView === 'inventory' && <motion.section key="inventory" className="panel table-panel full-table-panel" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24 }}><div className="panel-heading"><div><span className="eyebrow">{data.products.length} LISTED PRODUCTS</span><h2>Count what matters.</h2></div><span className="table-heading-note"><span className="stock-legend-dot" /> Low stock at reorder point</span></div><InventoryTable products={filteredProducts} onStockChange={onUpdateStock} onDeleteProduct={onDeleteProduct} pending={pending} /><p className="table-footnote">{data.mode === 'live' ? 'Stock changes persist to the connected Supabase products table. Deleting a product removes it from the storefront; saved order-item details are retained.' : 'Empty workspace — no product records are available yet.'}</p></motion.section>}
 
-          {activeView === 'supplier' && <motion.section key="supplier" className="supplier-stack" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24 }}><SupplierTable products={data.supplier || []} syncSummary={data.syncSummary || {}} onApprove={onApproveSupplier} onImportProduct={onImportSupplier} onSearchProducts={onSearchSupplier} onSyncStock={onSyncSupplierStock} importPanelRef={supplierImportPanelRef} importInputRef={supplierImportInputRef} /></motion.section>}
+          {activeView === 'product-editor' && <motion.div key="product-editor" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24 }}><ProductEditor products={data.productEditor || []} error={data.productEditorError || ''} onSearch={onSearchSupplier} onImport={onImportSupplier} onRefreshSupplier={onImportSupplier} onSyncStock={onSyncSupplierStock} onSave={onSaveEditorProduct} onStatus={onChangeEditorStatus} onPublish={onPublishEditorProduct} onUploadImage={onUploadEditorImage} onHistory={onGetProductHistory} onRestoreHistory={onRestoreProductHistory} /></motion.div>}
         </main>
       </div>
     </div>
@@ -343,10 +332,20 @@ export default function App() {
     setLoadError('')
     try {
       const dashboard = await adminRequest('dashboard')
+      let productEditor = []
+      let productEditorError = ''
+      try {
+        const editorData = await adminRequest('product-editor')
+        productEditor = Array.isArray(editorData.products) ? editorData.products : []
+      } catch (editorError) {
+        productEditorError = editorError instanceof Error ? editorError.message : 'Product Editor could not be loaded.'
+      }
       setData({
         ...dashboard,
         supplier: Array.isArray(dashboard.supplier) ? dashboard.supplier : [],
         syncSummary: dashboard.syncSummary || { imported: 0, approved: 0, pending: 0, logs: [] },
+        productEditor,
+        productEditorError,
       })
       setAuthenticated(true)
       return true
@@ -404,43 +403,65 @@ export default function App() {
     }
   }
 
-  async function handleApproveSupplier(productId, retailPrice, stock) {
-    setPending(true)
-    setMessage('')
-    try {
-      await adminRequest(`cj/products/${encodeURIComponent(productId)}/approve`, { method: 'POST', body: JSON.stringify({ retailPrice, stock }) })
-      await loadDashboard()
-      setMessage('CJ product approved and published with the Morrow House price and stock you entered.')
-    } catch (error) {
-      setLoadError(error instanceof Error ? error.message : 'The CJ product could not be approved.')
-    } finally {
-      setPending(false)
-    }
+  async function handleSaveEditorProduct(productId, content) {
+    const result = await adminRequest(`product-editor/${encodeURIComponent(productId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ content }),
+    })
+    if (!await loadDashboard()) throw new Error('Product was saved, but the dashboard could not refresh.')
+    return result
   }
 
-  async function handleApproveAllSupplier() {
-    setPending(true)
-    setMessage('')
-    try {
-      await adminRequest('cj/products/approve-all', { method: 'POST' })
-      await loadDashboard()
-      setMessage('All CJ products in the review queue were approved.')
-    } catch (error) {
-      setLoadError(error instanceof Error ? error.message : 'The CJ batch could not be approved.')
-    } finally {
-      setPending(false)
-    }
+  async function handleChangeEditorStatus(productId, status) {
+    const result = await adminRequest(`product-editor/${encodeURIComponent(productId)}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    })
+    if (!await loadDashboard()) throw new Error('Product status was updated, but the dashboard could not refresh.')
+    return result
+  }
+
+  async function handlePublishEditorProduct(productId) {
+    const result = await adminRequest(`product-editor/${encodeURIComponent(productId)}/publish`, { method: 'POST' })
+    if (!await loadDashboard()) throw new Error('Product was published, but the dashboard could not refresh.')
+    return result
+  }
+
+  async function handleUploadEditorImage(productId, file) {
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = () => reject(new Error('The image file could not be read.'))
+      reader.readAsDataURL(file)
+    })
+    return adminRequest(`product-editor/${encodeURIComponent(productId)}/images`, {
+      method: 'POST',
+      body: JSON.stringify({ base64, mimeType: file.type, fileName: file.name }),
+    })
+  }
+
+  async function handleGetProductHistory(productId) {
+    return adminRequest(`product-editor/${encodeURIComponent(productId)}/history`)
+  }
+
+  async function handleRestoreProductHistory(productId, historyId) {
+    const result = await adminRequest(`product-editor/${encodeURIComponent(productId)}/history/${encodeURIComponent(historyId)}/restore`, { method: 'POST' })
+    if (!await loadDashboard()) throw new Error('Product version was restored, but the dashboard could not refresh.')
+    return result
   }
 
   async function handleImportSupplier(productId) {
     setPending(true)
     setMessage('')
+    setLoadError('')
     try {
       await adminRequest('cj/products/import', { method: 'POST', body: JSON.stringify({ productId }) })
-      await loadDashboard()
+      if (!await loadDashboard()) throw new Error('The CJ product was imported, but Product Editor could not be refreshed.')
       setMessage('CJ product imported into the review queue.')
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : 'The CJ product could not be imported.')
+      const message = error instanceof Error ? error.message : 'The CJ product could not be imported.'
+      setLoadError(message)
+      throw new Error(message)
     } finally {
       setPending(false)
     }
@@ -451,15 +472,13 @@ export default function App() {
   }
 
   async function handleSyncSupplierStock(productId) {
-    setLoadError('')
     try {
       const result = await adminRequest(`cj/products/${encodeURIComponent(productId)}/sync-inventory`, { method: 'POST' })
-      await loadDashboard()
-      setMessage(Number(result.product?.stock) > 0
-        ? 'Verified CJ stock refreshed.'
-        : 'CJ returned no available stock for this product. Publishing stays disabled until stock is available.')
+      if (!await loadDashboard()) throw new Error('Supplier inventory was refreshed, but the dashboard could not reload.')
+      if (Number(result.product?.stock) <= 0) throw new Error('CJ returned no available stock for this product. Publishing stays disabled until stock is available.')
+      return result
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : 'CJ inventory could not be refreshed.')
+      throw new Error(error instanceof Error ? error.message : 'CJ inventory could not be refreshed.')
     }
   }
 
@@ -474,7 +493,7 @@ export default function App() {
   return (
     <MotionConfig reducedMotion="user">
       <div className="admin-app">
-        {checkingSession ? <main className="admin-loading"><CircleNotch className="spin" size={22} /><span>Checking this private workspace…</span></main> : authenticated && data ? <Dashboard data={data} onReload={loadDashboard} onLogout={logout} onUpdateStock={(id, stock) => updateRecord(`products/${encodeURIComponent(id)}`, { stock }, 'Stock level updated in this preview.')} onDeleteProduct={handleDeleteProduct} onUpdateOrder={(id, status) => updateRecord(`orders/${encodeURIComponent(id)}`, { status }, 'Order status updated in this preview.')} onApproveSupplier={handleApproveSupplier} onApproveAllSupplier={handleApproveAllSupplier} onImportSupplier={handleImportSupplier} onSearchSupplier={handleSearchSupplier} onSyncSupplierStock={handleSyncSupplierStock} message={message} error={loadError} pending={pending} /> : <AnimatePresence mode="wait"><motion.div key="login" initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><LoginPage onLogin={loadDashboard} /></motion.div></AnimatePresence>}
+        {checkingSession ? <main className="admin-loading"><CircleNotch className="spin" size={22} /><span>Checking this private workspace…</span></main> : authenticated && data ? <Dashboard data={data} onReload={loadDashboard} onLogout={logout} onUpdateStock={(id, stock) => updateRecord(`products/${encodeURIComponent(id)}`, { stock }, 'Stock level updated in this preview.')} onDeleteProduct={handleDeleteProduct} onUpdateOrder={(id, status) => updateRecord(`orders/${encodeURIComponent(id)}`, { status }, 'Order status updated in this preview.')} onImportSupplier={handleImportSupplier} onSearchSupplier={handleSearchSupplier} onSyncSupplierStock={handleSyncSupplierStock} onSaveEditorProduct={handleSaveEditorProduct} onChangeEditorStatus={handleChangeEditorStatus} onPublishEditorProduct={handlePublishEditorProduct} onUploadEditorImage={handleUploadEditorImage} onGetProductHistory={handleGetProductHistory} onRestoreProductHistory={handleRestoreProductHistory} message={message} error={loadError} pending={pending} /> : <AnimatePresence mode="wait"><motion.div key="login" initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><LoginPage onLogin={loadDashboard} /></motion.div></AnimatePresence>}
       </div>
     </MotionConfig>
   )
