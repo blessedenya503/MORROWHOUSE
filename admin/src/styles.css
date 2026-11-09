@@ -77,6 +77,9 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .admin-topbar { min-height: 62px; position: sticky; z-index: 5; top: 0; display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 0 clamp(20px, 3.1vw, 46px); border-bottom: 1px solid var(--admin-line); background: rgba(251,250,247,0.97); }
 .topbar-location, .topbar-actions { display: flex; align-items: center; }
 .topbar-location { gap: 11px; color: #a39f96; font-size: 10px; }
+.topbar-home-button { width: 25px; height: 25px; display: grid; place-items: center; border: 0; border-radius: 2px; padding: 0; color: inherit; background: transparent; cursor: pointer; }
+.topbar-home-button:hover, .topbar-home-button:focus-visible { color: var(--admin-wine); background: #f0eee8; }
+.topbar-home-button:focus-visible { outline: 2px solid var(--admin-wine); outline-offset: 2px; }
 .topbar-location strong { color: var(--admin-ink); font-size: 10px; font-weight: 600; }
 .topbar-actions { gap: 14px; }
 .admin-search { width: min(230px, 24vw); height: 34px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--admin-line); padding: 0 9px; color: var(--admin-muted); background: white; }
