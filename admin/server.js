@@ -252,14 +252,38 @@ async function deleteProduct(productId) {
     return products.splice(productIndex, 1)[0]
   }
 
+  const { data: editorProduct, error: editorLookupError } = await supabase
+    .from('cj_products')
+    .select('cj_product_id, editor_status')
+    .eq('public_product_id', productId)
+    .maybeSingle()
+  if (editorLookupError) throw editorLookupError
+
+  const now = new Date().toISOString()
   const { data, error } = await supabase
     .from('products')
-    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .update({ is_active: false, updated_at: now })
     .eq('id', productId)
     .eq('is_active', true)
     .select('id')
     .maybeSingle()
   if (error) throw error
+
+  if (data && editorProduct?.editor_status === 'PUBLISHED') {
+    const { error: editorUpdateError } = await supabase
+      .from('cj_products')
+      .update({ editor_status: 'EDITING', is_active: false, updated_at: now })
+      .eq('cj_product_id', editorProduct.cj_product_id)
+      .eq('editor_status', 'PUBLISHED')
+    if (editorUpdateError) throw editorUpdateError
+    await writeProductEditorHistory(editorProduct.cj_product_id, 'STATUS_CHANGED', {
+      editor_status: 'PUBLISHED',
+    }, {
+      editor_status: 'EDITING',
+      reason: 'Removed from storefront inventory.',
+    })
+  }
+
   return data
 }
 
@@ -422,18 +446,40 @@ async function importCJProductToSupabase(productId) {
   let data
 
   if (existing) {
+    const existingContent = existing.editor_content && typeof existing.editor_content === 'object'
+      ? existing.editor_content
+      : {}
+    const editorRepair = {}
+    if (!Object.keys(existingContent).length) {
+      editorRepair.editor_content = createProductEditorContent({ ...payload, inventory })
+    }
+    if (!existing.original_data || !Object.keys(existing.original_data).length) {
+      editorRepair.original_data = supplierData
+    }
+    if (!existing.public_product_id) {
+      const { data: legacyProduct, error: legacyProductError } = await supabase
+        .from('products')
+        .select('id')
+        .eq('id', payload.cjProductId)
+        .maybeSingle()
+      if (legacyProductError) throw legacyProductError
+      editorRepair.public_product_id = legacyProduct?.id || randomUUID()
+    }
+
     const { error } = await supabase
       .from('cj_products')
-      .update(supplierFields)
+      .update({ ...supplierFields, ...editorRepair })
       .eq('cj_product_id', payload.cjProductId)
     if (error) throw error
     data = await getProductEditorRow(payload.cjProductId)
     await writeProductEditorHistory(payload.cjProductId, 'SUPPLIER_REFRESHED', {
       inventory: existing.inventory,
       variants: existing.variants,
+      editor_content: existing.editor_content || {},
     }, {
       inventory: payload.inventory,
       variants: payload.variants,
+      editor_content: editorRepair.editor_content || existing.editor_content || {},
     })
   } else {
     const editorContent = createProductEditorContent(payload)
