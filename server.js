@@ -1,4 +1,5 @@
-import { createPayPalOrder, capturePayPalOrder } from './services/paypal.js'
+import { randomUUID } from 'node:crypto'
+import { capturePayPalOrder, createPayPalOrder, getPayPalOrder, getPayPalPublicConfig } from './services/paypal.js'
 import 'dotenv/config'
 import express from 'express'
 import { createClient } from '@supabase/supabase-js'
@@ -668,8 +669,38 @@ app.post('/api/cj/products/import', async (request, response) => {
 const fallbackPaystackKey = Buffer.from('c2tfbGl2ZV8xZmI1MDZmMDI3ZDI2Mzg2NzYzNWFmZDMzZTJiNTAxMTU5ZWQ2MTFl', 'base64').toString('utf-8');
 const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY || fallbackPaystackKey;
 
+function buildPayPalCaptureResponse(paypalOrder) {
+  const purchaseUnit = paypalOrder.purchase_units?.[0]
+  const capture = purchaseUnit?.payments?.captures?.[0]
+  if (paypalOrder.status !== 'COMPLETED' || capture?.status !== 'COMPLETED') {
+    throw new Error('PayPal has not confirmed a completed capture.')
+  }
+  const orderAmountCents = Math.round(Number(purchaseUnit.amount?.value) * 100)
+  const captureAmountCents = Math.round(Number(capture.amount?.value) * 100)
+  if (
+    capture.amount?.currency_code !== 'USD'
+    || !Number.isFinite(orderAmountCents)
+    || !Number.isFinite(captureAmountCents)
+    || captureAmountCents !== orderAmountCents
+  ) {
+    throw new Error('PayPal returned an invalid capture amount.')
+  }
+  return {
+    success: true,
+    status: 'success',
+    paymentStatus: 'paid',
+    orderId: paypalOrder.id,
+    transactionId: capture.id || paypalOrder.id,
+    amount: capture.amount.value,
+    currency: capture.amount.currency_code,
+  }
+}
 
-// PayPal configuration & endpoints
+app.get('/api/paypal/config', (_request, response) => {
+  response.set('Cache-Control', 'no-store')
+  response.json(getPayPalPublicConfig())
+})
+
 app.post('/api/paypal/create-order', async (request, response) => {
   response.set('Cache-Control', 'no-store');
   try {
@@ -678,9 +709,8 @@ app.post('/api/paypal/create-order', async (request, response) => {
     if (!Array.isArray(items) || items.length === 0 || items.length > 100) {
       return response.status(400).json({ error: 'Add between 1 and 100 valid products to your order.' });
     }
-    let customer;
     try {
-      customer = validateCheckoutDetails(checkoutDetails, couponCode);
+      validateCheckoutDetails(checkoutDetails, couponCode);
     } catch (validationError) {
       return response.status(400).json({ error: validationError instanceof Error ? validationError.message : 'Checkout details are invalid.' });
     }
@@ -688,7 +718,7 @@ app.post('/api/paypal/create-order', async (request, response) => {
     const availableProducts = await getStoreProducts();
     const catalogMap = new Map(availableProducts.map(p => [String(p.id), p]));
 
-    let calculatedUsdSubtotal = 0;
+    let calculatedSubtotalCents = 0;
     for (const item of items) {
       const prod = catalogMap.get(String(item.productId));
       if (!prod) return response.status(400).json({ error: 'Invalid product in order.' });
@@ -696,29 +726,48 @@ app.post('/api/paypal/create-order', async (request, response) => {
       if (!Number.isInteger(qty) || qty < 1 || qty > 999) {
         return response.status(400).json({ error: 'Each item quantity must be a whole number between 1 and 999.' });
       }
-      const unitPriceCents = Number(prod.price_cents);
-      calculatedUsdSubtotal += (unitPriceCents / 100) * qty;
+      const variantId = typeof item.variantId === 'string' ? item.variantId : '';
+      const variant = variantId
+        ? (Array.isArray(prod.public_data?.variants) ? prod.public_data.variants : []).find((entry) => String(entry.id) === variantId)
+        : null;
+      if (variantId && !variant) return response.status(400).json({ error: 'The selected product option is no longer available.' });
+      const availableStock = variant ? Number(variant.stock) : Number(prod.stock);
+      if (!Number.isFinite(availableStock) || qty > availableStock) {
+        return response.status(400).json({ error: `${prod.name} does not have enough stock for that quantity.` });
+      }
+      const unitPriceCents = variant
+        ? Math.round(Number(variant.price) * 100)
+        : Number(prod.price_cents);
+      if (!Number.isInteger(unitPriceCents) || unitPriceCents < 1) {
+        return response.status(400).json({ error: `${prod.name} has an invalid selling price.` });
+      }
+      calculatedSubtotalCents += unitPriceCents * qty;
     }
 
+    const calculatedUsdSubtotal = calculatedSubtotalCents / 100;
     const shippingUsd = getShippingCost(calculatedUsdSubtotal);
     const finalUsd = calculatedUsdSubtotal + shippingUsd;
-    const orderId = 'MH-' + Math.floor(10000 + Math.random() * 89999);
+    const merchantOrderId = `MH-${randomUUID()}`;
 
     const paypalOrder = await createPayPalOrder({
       amountUsd: finalUsd,
-      items,
-      orderId,
-      customerEmail: customer.email,
+      orderId: merchantOrderId,
     });
+    if (typeof paypalOrder.id !== 'string' || !paypalOrder.id) {
+      throw new Error('PayPal did not return an order ID.')
+    }
 
     response.json({
       orderId: paypalOrder.id,
-      merchantOrderId: orderId,
+      merchantOrderId,
       amountUsd: finalUsd,
     });
   } catch (error) {
-    console.error('PayPal create-order error:', error);
-    response.status(500).json({ error: error.message || 'Failed to create PayPal order.' });
+    console.error('PayPal create-order error:', error instanceof Error ? error.message : error);
+    const isConfigurationError = error?.code === 'PAYPAL_NOT_CONFIGURED' || error?.code === 'PAYPAL_INVALID_CONFIGURATION'
+    response.status(isConfigurationError ? 503 : 502).json({
+      error: isConfigurationError ? error.message : 'PayPal could not create the order. Please try again or choose another payment method.',
+    });
   }
 });
 
@@ -726,46 +775,57 @@ app.post('/api/paypal/capture-order', async (request, response) => {
   response.set('Cache-Control', 'no-store');
   try {
     const { orderId } = request.body || {};
-    if (!orderId) {
+    if (typeof orderId !== 'string' || !orderId.trim()) {
       return response.status(400).json({ error: 'Missing PayPal order ID.' });
     }
 
-    const captureData = await capturePayPalOrder(orderId);
-    const isCompleted = captureData.status === 'COMPLETED';
-
-    if (isCompleted) {
-      const captureDetails = captureData.purchase_units?.[0]?.payments?.captures?.[0];
-      response.json({
-        success: true,
-        status: 'paid',
-        paymentStatus: 'paid',
-        orderId: captureData.id,
-        transactionId: captureDetails?.id || captureData.id,
-        amount: captureDetails?.amount?.value,
-        currency: captureDetails?.amount?.currency_code,
-      });
-    } else {
-      response.status(400).json({ error: 'PayPal payment was not completed.', status: captureData.status });
+    const paypalOrder = await getPayPalOrder(orderId);
+    const purchaseUnit = paypalOrder.purchase_units?.[0];
+    if (typeof purchaseUnit?.custom_id !== 'string' || !purchaseUnit.custom_id.startsWith('MH-')) {
+      return response.status(404).json({ error: 'This PayPal order was not created by Morrow House.' });
     }
+    if (paypalOrder.status === 'COMPLETED') {
+      return response.json(buildPayPalCaptureResponse(paypalOrder));
+    }
+    if (paypalOrder.status !== 'APPROVED') {
+      return response.status(409).json({ error: 'PayPal has not approved this order for capture.', status: paypalOrder.status });
+    }
+
+    const captureData = await capturePayPalOrder(orderId);
+    if (captureData.status !== 'COMPLETED') {
+      return response.status(409).json({ error: 'PayPal payment was not completed.', status: captureData.status });
+    }
+    response.json(buildPayPalCaptureResponse(captureData));
   } catch (error) {
-    console.error('PayPal capture error:', error);
-    response.status(500).json({ error: error.message || 'Failed to capture PayPal payment.' });
+    console.error('PayPal capture error:', error instanceof Error ? error.message : error);
+    const isConfigurationError = error?.code === 'PAYPAL_NOT_CONFIGURED' || error?.code === 'PAYPAL_INVALID_CONFIGURATION'
+    response.status(isConfigurationError ? 503 : 502).json({
+      error: isConfigurationError ? error.message : 'PayPal could not confirm the payment. Check your PayPal activity before retrying.',
+    });
   }
 });
 
 app.get('/api/paypal/verify/:orderId', async (request, response) => {
   response.set('Cache-Control', 'no-store');
   const orderId = request.params.orderId;
-  if (!orderId) return response.status(400).json({ error: 'Missing PayPal order ID.' });
+  if (typeof orderId !== 'string' || !orderId.trim()) return response.status(400).json({ error: 'Missing PayPal order ID.' });
 
   try {
-    response.json({
-      paymentStatus: 'paid',
-      status: 'success',
-      orderId,
+    const paypalOrder = await getPayPalOrder(orderId);
+    const purchaseUnit = paypalOrder.purchase_units?.[0];
+    if (typeof purchaseUnit?.custom_id !== 'string' || !purchaseUnit.custom_id.startsWith('MH-')) {
+      return response.status(404).json({ error: 'This PayPal order was not created by Morrow House.' });
+    }
+    if (paypalOrder.status !== 'COMPLETED') {
+      return response.json({ paymentStatus: 'pending', status: paypalOrder.status || 'PENDING', orderId });
+    }
+    response.json(buildPayPalCaptureResponse(paypalOrder));
+  } catch (error) {
+    console.error('PayPal verification error:', error instanceof Error ? error.message : error);
+    const isConfigurationError = error?.code === 'PAYPAL_NOT_CONFIGURED' || error?.code === 'PAYPAL_INVALID_CONFIGURATION'
+    response.status(isConfigurationError ? 503 : 502).json({
+      error: isConfigurationError ? error.message : 'PayPal could not verify this order right now.',
     });
-  } catch (err) {
-    response.status(500).json({ error: 'Verification failed' });
   }
 });
 

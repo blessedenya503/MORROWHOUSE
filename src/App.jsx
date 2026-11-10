@@ -638,6 +638,7 @@ function CheckoutAddressFields({ title, address, onChange, idPrefix }) {
 function CheckoutPage({ cartProducts, cartCount, subtotal, onNavigate }) {
   const { currency, exchangeRate } = useCurrency()
   const [paymentGateway, setPaymentGateway] = useState('paystack')
+  const [paypalConfig, setPaypalConfig] = useState(null)
   const [checkoutPending, setCheckoutPending] = useState(false)
   const [checkoutNotice, setCheckoutNotice] = useState('')
   const [couponCode, setCouponCode] = useState('')
@@ -666,6 +667,22 @@ function CheckoutPage({ cartProducts, cartCount, subtotal, onNavigate }) {
     checkoutDetails.billingAddress.postalCode,
     checkoutDetails.billingAddress.country === 'US' ? 'United States' : 'Canada',
   ].filter(Boolean).join(', ')
+
+  useEffect(() => {
+    let active = true
+    fetch('/api/paypal/config')
+      .then(async (response) => {
+        if (!response.ok) throw new Error('PayPal configuration could not be loaded.')
+        return response.json()
+      })
+      .then((config) => {
+        if (active) setPaypalConfig(config)
+      })
+      .catch(() => {
+        if (active) setPaypalConfig({ enabled: false, clientId: '' })
+      })
+    return () => { active = false }
+  }, [])
 
   function updateCheckoutField(field, value) {
     setCheckoutDetails((current) => ({ ...current, [field]: value }))
@@ -863,9 +880,9 @@ function CheckoutPage({ cartProducts, cartCount, subtotal, onNavigate }) {
                 <button type="submit" className="checkout-button" disabled={checkoutPending} aria-busy={checkoutPending}>
                   {checkoutPending ? <><CircleNotch className="checkout-spinner" size={17} /> Connecting securely</> : <>Review & pay with Paystack <ArrowRight size={17} /></>}
                 </button>
-              ) : (
+              ) : paypalConfig?.enabled ? (
                 <div style={{ marginTop: '8px', position: 'relative', zIndex: 10 }}>
-                  <PayPalScriptProvider options={{ clientId: import.meta.env.VITE_PAYPAL_CLIENT_ID || 'BAA8xpQ0fXsTMOpkUFyj8rdrha9-zaFXnV7fOQ0O5u6vFnnTJsjfQ9pbWVuVinMfFa6gRcvXd1bhP2q8xQ', currency: 'USD' }}>
+                  <PayPalScriptProvider options={{ clientId: paypalConfig.clientId, currency: 'USD' }}>
                     <PayPalButtons
                       style={{ layout: 'vertical', shape: 'rect', color: 'gold', height: 44, label: 'pay' }}
                       disabled={checkoutPending}
@@ -880,6 +897,14 @@ function CheckoutPage({ cartProducts, cartCount, subtotal, onNavigate }) {
                           { val: checkoutDetails.shippingAddress?.city, label: 'City' },
                           { val: checkoutDetails.shippingAddress?.region, label: 'State / Province' },
                           { val: checkoutDetails.shippingAddress?.postalCode, label: 'ZIP / Postal code' },
+                          { val: checkoutDetails.shippingAddress?.country, label: 'Country / region' },
+                          ...(!checkoutDetails.sameBillingAddress ? [
+                            { val: checkoutDetails.billingAddress?.line1, label: 'Billing street address' },
+                            { val: checkoutDetails.billingAddress?.city, label: 'Billing city' },
+                            { val: checkoutDetails.billingAddress?.region, label: 'Billing state / province' },
+                            { val: checkoutDetails.billingAddress?.postalCode, label: 'Billing ZIP / postal code' },
+                            { val: checkoutDetails.billingAddress?.country, label: 'Billing country / region' },
+                          ] : []),
                         ]
                         const missing = requiredFields.find((f) => !f.val || !f.val.trim())
                         if (missing) {
@@ -927,7 +952,7 @@ function CheckoutPage({ cartProducts, cartCount, subtotal, onNavigate }) {
                       }}
                       onError={(err) => {
                         console.error('PayPal button error:', err)
-                        setCheckoutNotice((current) => current || 'PayPal encountered an error. Please ensure your delivery details are filled or switch to Paystack.')
+                        setCheckoutNotice((current) => current || 'PayPal could not load or complete checkout. Please try again or choose Paystack.')
                         setCheckoutPending(false)
                       }}
                       onCancel={() => {
@@ -936,6 +961,10 @@ function CheckoutPage({ cartProducts, cartCount, subtotal, onNavigate }) {
                     />
                   </PayPalScriptProvider>
                 </div>
+              ) : (
+                <p className="checkout-notice" role="status">
+                  {paypalConfig ? 'PayPal is not configured right now. Please choose Paystack or contact us for help.' : 'Checking PayPal availability…'}
+                </p>
               )}
             </form>
 
@@ -1243,7 +1272,7 @@ function App() {
           setCartItems({})
         } else {
           setCheckoutStatus('error')
-          setCheckoutError('Paystack has not marked this payment as complete. Your bag has been kept.')
+          setCheckoutError(isPayPal ? 'PayPal has not marked this payment as complete. Your bag has been kept.' : 'Paystack has not marked this payment as complete. Your bag has been kept.')
         }
       })
       .catch((error) => {

@@ -1,32 +1,82 @@
-const rawClientId = process.env.PAYPAL_CLIENT_ID ? process.env.PAYPAL_CLIENT_ID.trim() : '';
-const rawSecret = process.env.PAYPAL_CLIENT_SECRET ? process.env.PAYPAL_CLIENT_SECRET.trim() : '';
-const paypalClientId = (rawClientId && rawClientId.length > 10) ? rawClientId : 'BAA8xpQ0fXsTMOpkUFyj8rdrha9-zaFXnV7fOQ0O5u6vFnnTJsjfQ9pbWVuVinMfFa6gRcvXd1bhP2q8xQ';
-const paypalSecret = (rawSecret && rawSecret.length > 10) ? rawSecret : 'EDxC-48eGADBCeAXgnlS-TV_bJagDXBw14uce68UGYiSGB1TlbbAHPGVaXX7N-f3zH18hcpMFlo9qaAG';
-const paypalBaseUrl = 'https://api-m.paypal.com';
+function getPayPalConfig() {
+  const clientId = process.env.PAYPAL_CLIENT_ID?.trim()
+  const clientSecret = process.env.PAYPAL_CLIENT_SECRET?.trim()
+  const environment = (process.env.PAYPAL_ENVIRONMENT || 'live').trim().toLowerCase()
+
+  if (!clientId || !clientSecret) {
+    const error = new Error('PayPal is not configured on the server.')
+    error.code = 'PAYPAL_NOT_CONFIGURED'
+    throw error
+  }
+  if (environment !== 'sandbox' && environment !== 'live') {
+    const error = new Error('PAYPAL_ENVIRONMENT must be set to sandbox or live.')
+    error.code = 'PAYPAL_INVALID_CONFIGURATION'
+    throw error
+  }
+
+  return {
+    clientId,
+    clientSecret,
+    environment,
+    baseUrl: environment === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com',
+  }
+}
+
+async function readPayPalResponse(response, fallbackMessage) {
+  const responseText = await response.text()
+  let data = {}
+  if (responseText) {
+    try {
+      data = JSON.parse(responseText)
+    } catch {
+      if (response.ok) throw new Error('PayPal returned an invalid response.')
+    }
+  }
+  if (!response.ok) {
+    throw new Error(data.error_description || data.message || fallbackMessage)
+  }
+  return data
+}
+
+export function getPayPalPublicConfig() {
+  const clientId = process.env.PAYPAL_CLIENT_ID?.trim() || ''
+  const clientSecret = process.env.PAYPAL_CLIENT_SECRET?.trim() || ''
+  const environment = (process.env.PAYPAL_ENVIRONMENT || 'live').trim().toLowerCase()
+  const validEnvironment = environment === 'sandbox' || environment === 'live'
+  const enabled = Boolean(clientId && clientSecret && validEnvironment)
+  return {
+    enabled,
+    clientId: enabled ? clientId : '',
+  }
+}
 
 export async function getPayPalAccessToken() {
-  const auth = Buffer.from(paypalClientId + ':' + paypalSecret).toString('base64');
-  const res = await fetch(paypalBaseUrl + '/v1/oauth2/token', {
+  const config = getPayPalConfig()
+  const auth = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString('base64')
+  const response = await fetch(`${config.baseUrl}/v1/oauth2/token`, {
     method: 'POST',
     headers: {
-      Authorization: 'Basic ' + auth,
+      Authorization: `Basic ${auth}`,
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: 'grant_type=client_credentials',
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error_description || data.message || 'Failed to authenticate with PayPal');
+  })
+  const data = await readPayPalResponse(response, 'Failed to authenticate with PayPal.')
+  if (typeof data.access_token !== 'string' || !data.access_token) {
+    throw new Error('PayPal did not return an access token.')
   }
-  return data.access_token;
+  return { accessToken: data.access_token, baseUrl: config.baseUrl }
 }
 
-export async function createPayPalOrder({ amountUsd, items = [], orderId, customerEmail }) {
-  const accessToken = await getPayPalAccessToken();
-  const res = await fetch(paypalBaseUrl + '/v2/checkout/orders', {
+export async function createPayPalOrder({ amountUsd, orderId }) {
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
+    throw new Error('PayPal order amount must be greater than zero.')
+  }
+  const { accessToken, baseUrl } = await getPayPalAccessToken()
+  const response = await fetch(`${baseUrl}/v2/checkout/orders`, {
     method: 'POST',
     headers: {
-      Authorization: 'Bearer ' + accessToken,
+      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -35,10 +85,10 @@ export async function createPayPalOrder({ amountUsd, items = [], orderId, custom
         {
           reference_id: orderId,
           custom_id: orderId,
-          description: 'Morrow House Order ' + orderId,
+          description: `Morrow House Order ${orderId}`,
           amount: {
             currency_code: 'USD',
-            value: Number(amountUsd).toFixed(2),
+            value: amountUsd.toFixed(2),
           },
         },
       ],
@@ -48,28 +98,32 @@ export async function createPayPalOrder({ amountUsd, items = [], orderId, custom
         user_action: 'PAY_NOW',
       },
     }),
-  });
+  })
+  return readPayPalResponse(response, 'PayPal order creation failed.')
+}
 
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.message || 'PayPal order creation failed');
+export async function getPayPalOrder(paypalOrderId) {
+  if (typeof paypalOrderId !== 'string' || !paypalOrderId.trim()) {
+    throw new Error('A PayPal order ID is required.')
   }
-  return data;
+  const { accessToken, baseUrl } = await getPayPalAccessToken()
+  const response = await fetch(`${baseUrl}/v2/checkout/orders/${encodeURIComponent(paypalOrderId)}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  return readPayPalResponse(response, 'PayPal order verification failed.')
 }
 
 export async function capturePayPalOrder(paypalOrderId) {
-  const accessToken = await getPayPalAccessToken();
-  const res = await fetch(paypalBaseUrl + '/v2/checkout/orders/' + encodeURIComponent(paypalOrderId) + '/capture', {
+  if (typeof paypalOrderId !== 'string' || !paypalOrderId.trim()) {
+    throw new Error('A PayPal order ID is required.')
+  }
+  const { accessToken, baseUrl } = await getPayPalAccessToken()
+  const response = await fetch(`${baseUrl}/v2/checkout/orders/${encodeURIComponent(paypalOrderId)}/capture`, {
     method: 'POST',
     headers: {
-      Authorization: 'Bearer ' + accessToken,
+      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-  });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.message || 'PayPal order capture failed');
-  }
-  return data;
+  })
+  return readPayPalResponse(response, 'PayPal order capture failed.')
 }
