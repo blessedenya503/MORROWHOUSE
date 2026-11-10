@@ -869,6 +869,25 @@ function CheckoutPage({ cartProducts, cartCount, subtotal, onNavigate }) {
                     <PayPalButtons
                       style={{ layout: 'vertical', shape: 'rect', color: 'gold', height: 44, label: 'pay' }}
                       disabled={checkoutPending}
+                      onClick={(data, actions) => {
+                        setCheckoutNotice('')
+                        const requiredFields = [
+                          { val: checkoutDetails.firstName, label: 'First name' },
+                          { val: checkoutDetails.lastName, label: 'Last name' },
+                          { val: checkoutDetails.email, label: 'Email address' },
+                          { val: checkoutDetails.phone, label: 'Phone number' },
+                          { val: checkoutDetails.shippingAddress?.line1, label: 'Street address' },
+                          { val: checkoutDetails.shippingAddress?.city, label: 'City' },
+                          { val: checkoutDetails.shippingAddress?.region, label: 'State / Province' },
+                          { val: checkoutDetails.shippingAddress?.postalCode, label: 'ZIP / Postal code' },
+                        ]
+                        const missing = requiredFields.find((f) => !f.val || !f.val.trim())
+                        if (missing) {
+                          setCheckoutNotice(`Please fill in your ${missing.label} under "Your Details" before paying with PayPal.`)
+                          return actions.reject()
+                        }
+                        return actions.resolve()
+                      }}
                       createOrder={async () => {
                         setCheckoutPending(true)
                         setCheckoutNotice('')
@@ -908,7 +927,7 @@ function CheckoutPage({ cartProducts, cartCount, subtotal, onNavigate }) {
                       }}
                       onError={(err) => {
                         console.error('PayPal button error:', err)
-                        setCheckoutNotice('PayPal encountered an error. Please try again or switch to Paystack.')
+                        setCheckoutNotice((current) => current || 'PayPal encountered an error. Please ensure your delivery details are filled or switch to Paystack.')
                         setCheckoutPending(false)
                       }}
                       onCancel={() => {
