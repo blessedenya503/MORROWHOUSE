@@ -1,5 +1,7 @@
-const paypalClientId = process.env.PAYPAL_CLIENT_ID || 'BAA8xpQ0fXsTMOpkUFyj8rdrha9-zaFXnV7fOQ0O5u6vFnnTJsjfQ9pbWVuVinMfFa6gRcvXd1bhP2q8xQ';
-const paypalSecret = process.env.PAYPAL_CLIENT_SECRET || 'EDxC-48eGADBCeAXgnlS-TV_bJagDXBw14uce68UGYiSGB1TlbbAHPGVaXX7N-f3zH18hcpMFlo9qaAG';
+const rawClientId = process.env.PAYPAL_CLIENT_ID ? process.env.PAYPAL_CLIENT_ID.trim() : '';
+const rawSecret = process.env.PAYPAL_CLIENT_SECRET ? process.env.PAYPAL_CLIENT_SECRET.trim() : '';
+const paypalClientId = (rawClientId && rawClientId.length > 10) ? rawClientId : 'BAA8xpQ0fXsTMOpkUFyj8rdrha9-zaFXnV7fOQ0O5u6vFnnTJsjfQ9pbWVuVinMfFa6gRcvXd1bhP2q8xQ';
+const paypalSecret = (rawSecret && rawSecret.length > 10) ? rawSecret : 'EDxC-48eGADBCeAXgnlS-TV_bJagDXBw14uce68UGYiSGB1TlbbAHPGVaXX7N-f3zH18hcpMFlo9qaAG';
 const paypalBaseUrl = 'https://api-m.paypal.com';
 
 export async function getPayPalAccessToken() {
