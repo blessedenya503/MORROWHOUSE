@@ -5,6 +5,7 @@ import path from 'node:path'
 import { existsSync } from 'node:fs'
 import { buildApprovedMorrowHouseProduct, buildCJOrderPayload, buildCJProductImportPayload, buildCJSyncSummary, getCJConfig, getCJHealthStatus, getProductDetails, getProductInventory, getProductVariants, summarizeProductName, summarizeProductText } from './services/cj/index.js'
 import { getShippingCost, validateCheckoutDetails } from './services/checkout-validation.js'
+import { buildSitemapXml, getSitemapBaseUrl } from './services/sitemap.js'
 
 const app = express()
 const port = Number(process.env.PORT || 4242)
@@ -435,7 +436,7 @@ const fallbackProducts = [
   { id: 'cloud-throw', name: 'Cloud Weave Throw', category: 'Living', price_cents: 19500, stock: 14, image: 'photo-1600210491892-03d54c0aaf87', is_active: true, detail: 'Woven virgin wool throw with subtle fringed border in chalk white.' },
 ]
 
-async function getStoreProducts() {
+export async function getStoreProducts() {
   if (!supabase) return fallbackProducts
   try {
     const { data, error } = await supabase
@@ -459,6 +460,20 @@ async function getStoreProducts() {
     return fallbackProducts
   }
 }
+
+app.get('/sitemap.xml', async (_request, response) => {
+  try {
+    const products = await getStoreProducts()
+    const baseUrl = getSitemapBaseUrl(process.env.APP_URL)
+    response
+      .type('application/xml')
+      .set('Cache-Control', 'public, max-age=0, s-maxage=3600')
+      .send(buildSitemapXml(baseUrl, products))
+  } catch (error) {
+    console.error('Sitemap could not be generated:', error instanceof Error ? error.message : error)
+    response.status(500).type('text').send('Sitemap could not be generated.')
+  }
+})
 
 app.get('/api/products', async (_request, response) => {
   response.set('Cache-Control', 'no-store')
