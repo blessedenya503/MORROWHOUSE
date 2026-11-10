@@ -109,7 +109,7 @@ input:focus-visible {
   gap: 34px;
 }
 
-.mobile-menu-toggle {
+.icon-button.mobile-menu-toggle {
   display: none;
 }
 
@@ -1927,7 +1927,7 @@ input:focus-visible {
     font-size: 10px;
   }
 
-  .mobile-menu-toggle {
+  .icon-button.mobile-menu-toggle {
     display: inline-flex;
   }
 

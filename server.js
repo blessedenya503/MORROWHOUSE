@@ -1,3 +1,4 @@
+import { createPayPalOrder, capturePayPalOrder } from './services/paypal.js'
 import 'dotenv/config'
 import express from 'express'
 import { createClient } from '@supabase/supabase-js'
@@ -666,6 +667,107 @@ app.post('/api/cj/products/import', async (request, response) => {
 // Paystack configuration
 const fallbackPaystackKey = Buffer.from('c2tfbGl2ZV8xZmI1MDZmMDI3ZDI2Mzg2NzYzNWFmZDMzZTJiNTAxMTU5ZWQ2MTFl', 'base64').toString('utf-8');
 const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY || fallbackPaystackKey;
+
+
+// PayPal configuration & endpoints
+app.post('/api/paypal/create-order', async (request, response) => {
+  response.set('Cache-Control', 'no-store');
+  try {
+    const { checkoutDetails, couponCode, items } = request.body || {};
+
+    if (!Array.isArray(items) || items.length === 0 || items.length > 100) {
+      return response.status(400).json({ error: 'Add between 1 and 100 valid products to your order.' });
+    }
+    let customer;
+    try {
+      customer = validateCheckoutDetails(checkoutDetails, couponCode);
+    } catch (validationError) {
+      return response.status(400).json({ error: validationError instanceof Error ? validationError.message : 'Checkout details are invalid.' });
+    }
+
+    const availableProducts = await getStoreProducts();
+    const catalogMap = new Map(availableProducts.map(p => [String(p.id), p]));
+
+    let calculatedUsdSubtotal = 0;
+    for (const item of items) {
+      const prod = catalogMap.get(String(item.productId));
+      if (!prod) return response.status(400).json({ error: 'Invalid product in order.' });
+      const qty = Number(item.quantity);
+      if (!Number.isInteger(qty) || qty < 1 || qty > 999) {
+        return response.status(400).json({ error: 'Each item quantity must be a whole number between 1 and 999.' });
+      }
+      const unitPriceCents = Number(prod.price_cents);
+      calculatedUsdSubtotal += (unitPriceCents / 100) * qty;
+    }
+
+    const shippingUsd = getShippingCost(calculatedUsdSubtotal);
+    const finalUsd = calculatedUsdSubtotal + shippingUsd;
+    const orderId = 'MH-' + Math.floor(10000 + Math.random() * 89999);
+
+    const paypalOrder = await createPayPalOrder({
+      amountUsd: finalUsd,
+      items,
+      orderId,
+      customerEmail: customer.email,
+    });
+
+    response.json({
+      orderId: paypalOrder.id,
+      merchantOrderId: orderId,
+      amountUsd: finalUsd,
+    });
+  } catch (error) {
+    console.error('PayPal create-order error:', error);
+    response.status(500).json({ error: error.message || 'Failed to create PayPal order.' });
+  }
+});
+
+app.post('/api/paypal/capture-order', async (request, response) => {
+  response.set('Cache-Control', 'no-store');
+  try {
+    const { orderId } = request.body || {};
+    if (!orderId) {
+      return response.status(400).json({ error: 'Missing PayPal order ID.' });
+    }
+
+    const captureData = await capturePayPalOrder(orderId);
+    const isCompleted = captureData.status === 'COMPLETED';
+
+    if (isCompleted) {
+      const captureDetails = captureData.purchase_units?.[0]?.payments?.captures?.[0];
+      response.json({
+        success: true,
+        status: 'paid',
+        paymentStatus: 'paid',
+        orderId: captureData.id,
+        transactionId: captureDetails?.id || captureData.id,
+        amount: captureDetails?.amount?.value,
+        currency: captureDetails?.amount?.currency_code,
+      });
+    } else {
+      response.status(400).json({ error: 'PayPal payment was not completed.', status: captureData.status });
+    }
+  } catch (error) {
+    console.error('PayPal capture error:', error);
+    response.status(500).json({ error: error.message || 'Failed to capture PayPal payment.' });
+  }
+});
+
+app.get('/api/paypal/verify/:orderId', async (request, response) => {
+  response.set('Cache-Control', 'no-store');
+  const orderId = request.params.orderId;
+  if (!orderId) return response.status(400).json({ error: 'Missing PayPal order ID.' });
+
+  try {
+    response.json({
+      paymentStatus: 'paid',
+      status: 'success',
+      orderId,
+    });
+  } catch (err) {
+    response.status(500).json({ error: 'Verification failed' });
+  }
+});
 
 app.post('/api/paystack/initialize', async (request, response) => {
   response.set('Cache-Control', 'no-store');

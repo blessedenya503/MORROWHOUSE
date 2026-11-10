@@ -3,7 +3,8 @@ import { ArrowRight, CheckCircle, CircleNotch, Heart, List, LockKey, MagnifyingG
 import { AnimatePresence, MotionConfig, motion, useReducedMotion, useScroll, useTransform } from 'framer-motion'
 import countryToCurrency from 'country-to-currency'
 import RibbonGlow from './components/RibbonGlow.jsx'
-import { PaystackLogo } from './components/PaymentLogos.jsx'
+import { PaystackLogo, PayPalLogo } from './components/PaymentLogos.jsx'
+import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js'
 import './App.css'
 
 const revealItem = {
@@ -636,6 +637,7 @@ function CheckoutAddressFields({ title, address, onChange, idPrefix }) {
 
 function CheckoutPage({ cartProducts, cartCount, subtotal, onNavigate }) {
   const { currency, exchangeRate } = useCurrency()
+  const [paymentGateway, setPaymentGateway] = useState('paystack')
   const [checkoutPending, setCheckoutPending] = useState(false)
   const [checkoutNotice, setCheckoutNotice] = useState('')
   const [couponCode, setCouponCode] = useState('')
@@ -810,13 +812,112 @@ function CheckoutPage({ cartProducts, cartCount, subtotal, onNavigate }) {
 
               <div className="checkout-payment-method">
                 <span className="overline">PAYMENT METHOD</span>
-                <div><PaystackLogo className="h-4 w-auto" /><span><strong>Paystack secure checkout</strong><small>Cards, bank transfer, Apple Pay and USSD</small></span></div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', border: 'none', padding: 0 }}>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentGateway('paystack')}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '5px',
+                      padding: '11px 8px',
+                      border: paymentGateway === 'paystack' ? '2px solid #282622' : '1px solid var(--line)',
+                      background: paymentGateway === 'paystack' ? 'white' : 'transparent',
+                      cursor: 'pointer',
+                      borderRadius: '4px',
+                      font: 'inherit',
+                    }}
+                  >
+                    <PaystackLogo className="h-4 w-auto" />
+                    <span style={{ fontSize: '10px', fontWeight: paymentGateway === 'paystack' ? 700 : 500, color: 'var(--ink)' }}>Cards, Bank, Apple Pay</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentGateway('paypal')}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '5px',
+                      padding: '11px 8px',
+                      border: paymentGateway === 'paypal' ? '2px solid #282622' : '1px solid var(--line)',
+                      background: paymentGateway === 'paypal' ? 'white' : 'transparent',
+                      cursor: 'pointer',
+                      borderRadius: '4px',
+                      font: 'inherit',
+                    }}
+                  >
+                    <PayPalLogo className="h-4 w-auto" />
+                    <span style={{ fontSize: '10px', fontWeight: paymentGateway === 'paypal' ? 700 : 500, color: 'var(--ink)' }}>PayPal & Pay Later</span>
+                  </button>
+                </div>
               </div>
 
               <div className="summary-line checkout-final-total"><span>Amount due</span><strong>{formatPrice(finalTotalUsd, currency, exchangeRate)}</strong></div>
-              <button type="submit" className="checkout-button" disabled={checkoutPending} aria-busy={checkoutPending}>
-                {checkoutPending ? <><CircleNotch className="checkout-spinner" size={17} /> Connecting securely</> : <>Review & pay with Paystack <ArrowRight size={17} /></>}
-              </button>
+
+              {paymentGateway === 'paystack' ? (
+                <button type="submit" className="checkout-button" disabled={checkoutPending} aria-busy={checkoutPending}>
+                  {checkoutPending ? <><CircleNotch className="checkout-spinner" size={17} /> Connecting securely</> : <>Review & pay with Paystack <ArrowRight size={17} /></>}
+                </button>
+              ) : (
+                <div style={{ marginTop: '8px', position: 'relative', zIndex: 10 }}>
+                  <PayPalScriptProvider options={{ clientId: import.meta.env.VITE_PAYPAL_CLIENT_ID || 'BAA8xpQ0fXsTMOpkUFyj8rdrha9-zaFXnV7fOQ0O5u6vFnnTJsjfQ9pbWVuVinMfFa6gRcvXd1bhP2q8xQ', currency: 'USD' }}>
+                    <PayPalButtons
+                      style={{ layout: 'vertical', shape: 'rect', color: 'gold', height: 44, label: 'pay' }}
+                      disabled={checkoutPending}
+                      createOrder={async () => {
+                        setCheckoutPending(true)
+                        setCheckoutNotice('')
+                        try {
+                          const res = await fetch('/api/paypal/create-order', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              checkoutDetails,
+                              couponCode,
+                              items: cartProducts.map((product) => ({ productId: product.id, variantId: product.variantId || undefined, quantity: product.quantity })),
+                            }),
+                          })
+                          const data = await res.json()
+                          if (!res.ok || !data.orderId) throw new Error(data.error || 'Failed to initialize PayPal order.')
+                          return data.orderId
+                        } catch (err) {
+                          setCheckoutNotice(err.message || 'PayPal order creation failed.')
+                          setCheckoutPending(false)
+                          throw err
+                        }
+                      }}
+                      onApprove={async (data) => {
+                        try {
+                          const res = await fetch('/api/paypal/capture-order', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ orderId: data.orderID }),
+                          })
+                          const captureResult = await res.json()
+                          if (!res.ok || !captureResult.success) throw new Error(captureResult.error || 'Payment capture failed.')
+                          window.location.href = `/checkout/success?session_id=${encodeURIComponent(data.orderID)}&gateway=paypal`
+                        } catch (err) {
+                          setCheckoutNotice(err.message || 'PayPal payment could not be captured.')
+                          setCheckoutPending(false)
+                        }
+                      }}
+                      onError={(err) => {
+                        console.error('PayPal button error:', err)
+                        setCheckoutNotice('PayPal encountered an error. Please try again or switch to Paystack.')
+                        setCheckoutPending(false)
+                      }}
+                      onCancel={() => {
+                        setCheckoutPending(false)
+                      }}
+                    />
+                  </PayPalScriptProvider>
+                </div>
+              )}
             </form>
 
             <div className="checkout-security"><LockKey size={14} /><span>PCI-DSS 256-bit Encrypted Checkout</span></div>
@@ -1104,8 +1205,12 @@ function App() {
     if (!isCheckoutSuccess || !checkoutSessionId) return
 
     let active = true
-    const isPaystack = new URLSearchParams(window.location.search).get('paystack') === 'true'
-    const verifyEndpoint = isPaystack
+    const searchParams = new URLSearchParams(window.location.search)
+    const isPaystack = searchParams.get('paystack') === 'true'
+    const isPayPal = searchParams.get('gateway') === 'paypal'
+    const verifyEndpoint = isPayPal
+      ? `/api/paypal/verify/${encodeURIComponent(checkoutSessionId)}`
+      : isPaystack
       ? `/api/paystack/verify/${encodeURIComponent(checkoutSessionId)}`
       : `/api/checkout_sessions/${encodeURIComponent(checkoutSessionId)}`
 
