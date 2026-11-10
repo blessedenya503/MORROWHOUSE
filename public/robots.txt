@@ -4,4 +4,4 @@ Disallow: /checkout
 Disallow: /checkout/success
 Disallow: /track-order
 
-Sitemap: https://morrowhouse.vercel.app/sitemap.xml
+Sitemap: https://morrowhouseofficial.vercel.app/sitemap.xml

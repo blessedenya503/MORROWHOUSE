@@ -9,7 +9,7 @@ const staticPages = [
 ]
 
 export function getSitemapBaseUrl(configuredBaseUrl) {
-  const fallback = 'https://morrowhouse.vercel.app'
+  const fallback = 'https://morrowhouseofficial.vercel.app'
   if (!configuredBaseUrl) return fallback
 
   try {

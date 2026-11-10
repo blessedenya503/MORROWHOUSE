@@ -9,7 +9,7 @@ import { buildSitemapXml, getSitemapBaseUrl } from './services/sitemap.js'
 
 const app = express()
 const port = Number(process.env.PORT || 4242)
-const appUrl = (process.env.APP_URL || 'http://127.0.0.1:5173').replace(/\/+$/, '')
+const appUrl = (process.env.APP_URL || 'https://morrowhouseofficial.vercel.app').replace(/\/+$/, '')
 const supabaseUrl = process.env.SUPABASE_URL || ''
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const supabase = supabaseUrl && supabaseServiceRoleKey
