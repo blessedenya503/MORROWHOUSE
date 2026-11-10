@@ -3039,6 +3039,25 @@ input:focus-visible {
     font-size: 17px;
   }
 
+  .checkout-form-grid,
+  .checkout-address-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .checkout-field-wide {
+    grid-column: auto;
+  }
+
+  .checkout-form {
+    gap: 16px;
+  }
+
+  .checkout-field input,
+  .checkout-field select {
+    min-height: 46px;
+    font-size: 16px;
+  }
+
   .track-order-form,
   .track-result {
     padding: 17px;
@@ -3091,3 +3110,34 @@ input:focus-visible {
 .product-specification-list dd { margin: 0; text-align: right; }
 .cart-item-variant { margin: 0 0 5px !important; color: var(--ink) !important; font-weight: 600; }
 .product-detail-add-button:disabled { cursor: not-allowed; opacity: .55; }
+
+.checkout-summary { min-width: 0; }
+.checkout-summary > h2 { margin: 8px 0 17px; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 30px; font-weight: 500; }
+.checkout-form { display: grid; gap: 18px; margin-top: 20px; }
+.checkout-section-heading { display: grid; gap: 4px; }
+.checkout-section-heading h3 { margin: 0; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 25px; font-weight: 500; }
+.checkout-form-grid, .checkout-address-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+.checkout-field { min-width: 0; display: grid; gap: 6px; color: var(--ink); font-size: 11px; font-weight: 600; }
+.checkout-field input, .checkout-field select { width: 100%; min-width: 0; min-height: 43px; border: 1px solid var(--line); border-radius: 0; padding: 9px 10px; color: var(--ink); background: white; font: inherit; font-size: 13px; font-weight: 400; }
+.checkout-field input:focus, .checkout-field select:focus { border-color: var(--wine); outline: 2px solid color-mix(in srgb, var(--wine) 18%, transparent); outline-offset: 1px; }
+.checkout-field-wide { grid-column: 1 / -1; }
+.checkout-address-fields { margin: 0; border: 0; border-top: 1px solid var(--line); padding: 13px 0 0; }
+.checkout-address-fields legend, .checkout-shipping-method legend { margin-bottom: 10px; padding: 0; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 22px; font-weight: 500; }
+.checkout-shipping-method { display: grid; gap: 8px; margin: 0; border: 0; border-top: 1px solid var(--line); padding: 13px 0 0; }
+.checkout-shipping-method label { display: flex; align-items: flex-start; gap: 9px; border: 1px solid var(--line); padding: 11px; cursor: pointer; }
+.checkout-shipping-method input, .checkout-same-address input { accent-color: var(--wine); }
+.checkout-shipping-method label > span, .checkout-payment-method > div > span { display: grid; gap: 4px; }
+.checkout-shipping-method strong, .checkout-payment-method strong { font-size: 11px; }
+.checkout-shipping-method small, .checkout-payment-method small { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.checkout-same-address { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 11px; cursor: pointer; }
+.checkout-address-review { display: grid; gap: 5px; border: 1px solid var(--line); padding: 11px; color: var(--muted); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.checkout-address-review strong { color: var(--ink); font-size: 12px; }
+.checkout-coupon { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; border-top: 1px solid var(--line); padding-top: 13px; }
+.checkout-coupon-button { min-height: 43px; border: 1px solid var(--line); padding: 0 13px; color: var(--ink); background: white; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
+.checkout-coupon-button:hover { border-color: var(--wine); color: var(--wine); }
+.checkout-coupon p { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.checkout-coupon p.is-error { color: #9a4036; }
+.checkout-payment-method { display: grid; gap: 9px; border-top: 1px solid var(--line); padding-top: 13px; }
+.checkout-payment-method > div { display: flex; align-items: center; gap: 11px; border: 1px solid var(--line); padding: 11px; }
+.checkout-final-total { border-top: 1px solid var(--line); padding-top: 12px; }
+.checkout-form > .checkout-button { margin-top: -6px; }

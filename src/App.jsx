@@ -607,20 +607,76 @@ function ProductPage({ product, products, onNavigate, onAdd }) {
   )
 }
 
+function CheckoutAddressFields({ title, address, onChange, idPrefix }) {
+  const field = (name, label, autocomplete, options = {}) => (
+    <label className="checkout-field" htmlFor={`${idPrefix}-${name}`}>
+      <span>{label}{options.optional ? ' (optional)' : ' *'}</span>
+      <input id={`${idPrefix}-${name}`} name={`${idPrefix}-${name}`} autoComplete={autocomplete} value={address[name] || ''} onChange={(event) => onChange(name, event.target.value)} required={!options.optional} maxLength={options.maxLength || 200} />
+    </label>
+  )
+
+  return (
+    <fieldset className="checkout-address-fields">
+      <legend>{title}</legend>
+      {field('line1', 'Street address', `${idPrefix} address-line1`)}
+      {field('line2', 'Apartment / suite', `${idPrefix} address-line2`, { optional: true })}
+      {field('city', 'City', `${idPrefix} address-level2`, { maxLength: 100 })}
+      {field('region', 'State / province', `${idPrefix} address-level1`, { maxLength: 100 })}
+      {field('postalCode', 'ZIP / postal code', `${idPrefix} postal-code`, { maxLength: 24 })}
+      <label className="checkout-field" htmlFor={`${idPrefix}-country`}>
+        <span>Country / region *</span>
+        <select id={`${idPrefix}-country`} name={`${idPrefix}-country`} autoComplete={`${idPrefix} country`} value={address.country} onChange={(event) => onChange('country', event.target.value)} required>
+          <option value="US">United States</option>
+          <option value="CA">Canada</option>
+        </select>
+      </label>
+    </fieldset>
+  )
+}
+
 function CheckoutPage({ cartProducts, cartCount, subtotal, onNavigate }) {
-  const { currency, exchangeRate, rates } = useCurrency()
+  const { currency, exchangeRate } = useCurrency()
   const [checkoutPending, setCheckoutPending] = useState(false)
   const [checkoutNotice, setCheckoutNotice] = useState('')
-  const [customerEmail, setCustomerEmail] = useState('')
-  const [customerName, setCustomerName] = useState('')
+  const [couponCode, setCouponCode] = useState('')
+  const [couponNotice, setCouponNotice] = useState('')
+  const [checkoutDetails, setCheckoutDetails] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    shippingMethod: 'ground',
+    sameBillingAddress: true,
+    shippingAddress: { line1: '', line2: '', city: '', region: '', postalCode: '', country: 'US' },
+    billingAddress: { line1: '', line2: '', city: '', region: '', postalCode: '', country: 'US' },
+  })
 
-  const freeShipping = subtotal >= 150
-  const finalTotalUsd = subtotal + (freeShipping ? 0 : 15)
+  const shippingUsd = subtotal >= 150 ? 0 : 15
+  const finalTotalUsd = subtotal + shippingUsd
+  const customerName = `${checkoutDetails.firstName} ${checkoutDetails.lastName}`.trim()
+  const deliveryRegionSummary = [checkoutDetails.shippingAddress.city, checkoutDetails.shippingAddress.region, checkoutDetails.shippingAddress.postalCode].filter(Boolean).join(', ')
+  const deliveryCountry = checkoutDetails.shippingAddress.country === 'US' ? 'United States' : 'Canada'
+  const billingAddressSummary = [
+    checkoutDetails.billingAddress.line1,
+    checkoutDetails.billingAddress.line2,
+    checkoutDetails.billingAddress.city,
+    checkoutDetails.billingAddress.region,
+    checkoutDetails.billingAddress.postalCode,
+    checkoutDetails.billingAddress.country === 'US' ? 'United States' : 'Canada',
+  ].filter(Boolean).join(', ')
 
-  async function handlePaystackCheckout(e) {
-    e.preventDefault()
-    if (!customerEmail.trim() || !customerEmail.includes('@')) {
-      setCheckoutNotice('Please enter a valid email address to receive your order receipt.')
+  function updateCheckoutField(field, value) {
+    setCheckoutDetails((current) => ({ ...current, [field]: value }))
+  }
+
+  function updateAddress(group, field, value) {
+    setCheckoutDetails((current) => ({ ...current, [group]: { ...current[group], [field]: value } }))
+  }
+
+  async function handlePaystackCheckout(event) {
+    event.preventDefault()
+    if (couponCode.trim()) {
+      setCheckoutNotice('There are no active coupon codes right now. Please contact us if you need help with a promotion.')
       return
     }
 
@@ -628,18 +684,13 @@ function CheckoutPage({ cartProducts, cartCount, subtotal, onNavigate }) {
     setCheckoutNotice('')
 
     try {
-      const ngnRate = Number(rates['NGN']) || 1480
-      const totalNgn = Math.round(finalTotalUsd * ngnRate)
-
       const response = await fetch('/api/paystack/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customerEmail: customerEmail.trim(),
-          customerName: customerName.trim() || 'Morrow House Client',
+          checkoutDetails,
+          couponCode,
           items: cartProducts.map((product) => ({ productId: product.id, variantId: product.variantId || undefined, quantity: product.quantity })),
-          amountUsd: finalTotalUsd,
-          amountNgn: totalNgn,
         }),
       })
 
@@ -656,13 +707,17 @@ function CheckoutPage({ cartProducts, cartCount, subtotal, onNavigate }) {
         try {
           const handler = win.PaystackPop.setup({
             key: paystackPublicKey,
-            email: customerEmail.trim(),
-            amount: Math.round(totalNgn * 100),
+            email: checkoutDetails.email.trim(),
+            amount: Math.round(data.amountNgn * 100),
             currency: 'NGN',
             ref: data.reference,
             metadata: {
               orderId: data.orderId,
-              customerName: customerName.trim() || 'Morrow House Client',
+              customerName,
+              customerPhone: checkoutDetails.phone,
+              shippingMethod: checkoutDetails.shippingMethod,
+              shippingAddress: checkoutDetails.shippingAddress,
+              billingAddress: checkoutDetails.sameBillingAddress ? checkoutDetails.shippingAddress : checkoutDetails.billingAddress,
             },
             callback: function (resp) {
               window.location.href = `/checkout/success?session_id=${resp.reference}&paystack=true`
@@ -673,8 +728,8 @@ function CheckoutPage({ cartProducts, cartCount, subtotal, onNavigate }) {
           })
           handler.openIframe()
           return
-        } catch (popupErr) {
-          console.warn('Paystack popup fallback to redirect:', popupErr)
+        } catch (popupError) {
+          console.warn('Paystack popup fallback to redirect:', popupError)
         }
       }
 
@@ -717,43 +772,50 @@ function CheckoutPage({ cartProducts, cartCount, subtotal, onNavigate }) {
             <span className="overline">THE IMPORTANT DETAILS</span>
             <h2>Order summary</h2>
             <div className="summary-line"><span>Items · {cartCount} {cartCount === 1 ? 'piece' : 'pieces'}</span><strong>{formatPrice(subtotal, currency, exchangeRate)}</strong></div>
-            <div className="summary-line summary-muted"><span>Shipping</span><span>{freeShipping ? 'Complimentary' : formatPrice(15, currency, exchangeRate)}</span></div>
-            <div className="summary-total"><span>Total</span><strong>{formatPrice(finalTotalUsd, currency, exchangeRate)}</strong></div>
+            <div className="summary-line summary-muted"><span>Ground shipping</span><span>{shippingUsd === 0 ? 'Complimentary' : formatPrice(shippingUsd, currency, exchangeRate)}</span></div>
 
-            <form onSubmit={handlePaystackCheckout} style={{ marginTop: '20px' }}>
-              <div style={{ marginBottom: '16px' }}>
-                <label htmlFor="paystack-email" style={{ display: 'block', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>Email Address *</label>
-                <input
-                  id="paystack-email"
-                  type="email"
-                  required
-                  placeholder="you@example.com"
-                  value={customerEmail}
-                  onChange={(e) => setCustomerEmail(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(0,0,0,0.15)', borderRadius: '4px', marginBottom: '8px', fontSize: '14px', background: '#fff' }}
-                />
-                <label htmlFor="paystack-name" style={{ display: 'block', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>Full Name</label>
-                <input
-                  id="paystack-name"
-                  type="text"
-                  placeholder="Your name"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(0,0,0,0.15)', borderRadius: '4px', fontSize: '14px', background: '#fff' }}
-                />
+            <form className="checkout-form" onSubmit={handlePaystackCheckout}>
+              <div className="checkout-section-heading"><span className="overline">YOUR DETAILS</span><h3>Contact</h3></div>
+              <div className="checkout-form-grid">
+                <label className="checkout-field" htmlFor="checkout-first-name"><span>First name *</span><input id="checkout-first-name" name="given-name" autoComplete="given-name" value={checkoutDetails.firstName} onChange={(event) => updateCheckoutField('firstName', event.target.value)} maxLength={100} required /></label>
+                <label className="checkout-field" htmlFor="checkout-last-name"><span>Last name *</span><input id="checkout-last-name" name="family-name" autoComplete="family-name" value={checkoutDetails.lastName} onChange={(event) => updateCheckoutField('lastName', event.target.value)} maxLength={100} required /></label>
+                <label className="checkout-field checkout-field-wide" htmlFor="checkout-email"><span>Email address *</span><input id="checkout-email" type="email" name="email" autoComplete="email" value={checkoutDetails.email} onChange={(event) => updateCheckoutField('email', event.target.value)} maxLength={254} required /></label>
+                <label className="checkout-field checkout-field-wide" htmlFor="checkout-phone"><span>Phone number *</span><input id="checkout-phone" type="tel" name="tel" autoComplete="tel" value={checkoutDetails.phone} onChange={(event) => updateCheckoutField('phone', event.target.value)} maxLength={30} required /></label>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', padding: '8px 10px', background: '#f5f5f3', borderRadius: '4px' }}>
-                <PaystackLogo className="h-4 w-auto" />
-                <span style={{ fontSize: '12px', color: '#555' }}>Supports Cards, Bank Transfer, Apple Pay, & USSD</span>
+              <CheckoutAddressFields title="Delivery / shipping address" idPrefix="shipping" address={checkoutDetails.shippingAddress} onChange={(field, value) => updateAddress('shippingAddress', field, value)} />
+
+              <fieldset className="checkout-shipping-method">
+                <legend>Shipping method</legend>
+                <label><input type="radio" name="shipping-method" value="ground" checked={checkoutDetails.shippingMethod === 'ground'} onChange={(event) => updateCheckoutField('shippingMethod', event.target.value)} required /><span><strong>Ground shipping</strong><small>United States and Canada · {shippingUsd === 0 ? 'Complimentary' : `${formatPrice(shippingUsd, currency, exchangeRate)} · Free over $150`}</small></span></label>
+              </fieldset>
+
+              <label className="checkout-same-address"><input type="checkbox" checked={checkoutDetails.sameBillingAddress} onChange={(event) => updateCheckoutField('sameBillingAddress', event.target.checked)} /><span>Billing address is the same as delivery</span></label>
+              {!checkoutDetails.sameBillingAddress && <CheckoutAddressFields title="Billing address" idPrefix="billing" address={checkoutDetails.billingAddress} onChange={(field, value) => updateAddress('billingAddress', field, value)} />}
+
+              <section className="checkout-address-review" aria-label="Address review">
+                <span className="overline">REVIEW BEFORE PAYMENT</span>
+                <strong>{customerName || 'Your name'}</strong>
+                <span>{checkoutDetails.email || 'Your email'} · {checkoutDetails.phone || 'Your phone'}</span>
+                <span>{checkoutDetails.shippingAddress.line1 || 'Delivery street address'}{checkoutDetails.shippingAddress.line2 ? `, ${checkoutDetails.shippingAddress.line2}` : ''}</span>
+                <span>{deliveryRegionSummary || 'City, state/province, ZIP/postal code'} · {deliveryCountry}</span>
+                {!checkoutDetails.sameBillingAddress && <span>Billing: {checkoutDetails.billingAddress.line1 ? billingAddressSummary : 'Enter your billing address above'}</span>}
+              </section>
+
+              <div className="checkout-coupon">
+                <label className="checkout-field" htmlFor="checkout-coupon"><span>Discount / coupon code</span><input id="checkout-coupon" name="coupon" autoComplete="off" value={couponCode} onChange={(event) => { setCouponCode(event.target.value); setCouponNotice('') }} placeholder="Enter a code" /></label>
+                <button type="button" className="checkout-coupon-button" onClick={() => setCouponNotice(couponCode.trim() ? 'There are no active coupon codes right now. Please contact us if you need help with a promotion.' : 'Enter a coupon code to check it.')}>Apply</button>
+                <p className={couponNotice ? 'is-error' : ''} role={couponNotice ? 'status' : undefined}>{couponNotice || <>No active codes right now. <a href="/contact" onClick={(event) => onNavigate(event, '/contact')}>Contact us</a> for promotion questions.</>}</p>
               </div>
 
+              <div className="checkout-payment-method">
+                <span className="overline">PAYMENT METHOD</span>
+                <div><PaystackLogo className="h-4 w-auto" /><span><strong>Paystack secure checkout</strong><small>Cards, bank transfer, Apple Pay and USSD</small></span></div>
+              </div>
+
+              <div className="summary-line checkout-final-total"><span>Amount due</span><strong>{formatPrice(finalTotalUsd, currency, exchangeRate)}</strong></div>
               <button type="submit" className="checkout-button" disabled={checkoutPending} aria-busy={checkoutPending}>
-                {checkoutPending ? (
-                  <><CircleNotch className="checkout-spinner" size={17} /> Connecting securely</>
-                ) : (
-                  <>Pay with Paystack <ArrowRight size={17} /></>
-                )}
+                {checkoutPending ? <><CircleNotch className="checkout-spinner" size={17} /> Connecting securely</> : <>Review & pay with Paystack <ArrowRight size={17} /></>}
               </button>
             </form>
 

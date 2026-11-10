@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import path from 'node:path'
 import { existsSync } from 'node:fs'
 import { buildApprovedMorrowHouseProduct, buildCJOrderPayload, buildCJProductImportPayload, buildCJSyncSummary, getCJConfig, getCJHealthStatus, getProductDetails, getProductInventory, getProductVariants, summarizeProductName, summarizeProductText } from './services/cj/index.js'
+import { getShippingCost, validateCheckoutDetails } from './services/checkout-validation.js'
 
 const app = express()
 const port = Number(process.env.PORT || 4242)
@@ -654,10 +655,16 @@ const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY || fallbackPaystackKey
 app.post('/api/paystack/initialize', async (request, response) => {
   response.set('Cache-Control', 'no-store');
   try {
-    const { customerEmail, customerName, items, callbackUrl } = request.body || {};
+    const { checkoutDetails, couponCode, items, callbackUrl } = request.body || {};
 
-    if (!customerEmail || !items || !Array.isArray(items) || items.length === 0) {
-      return response.status(400).json({ error: 'Valid customer email and items are required.' });
+    if (!Array.isArray(items) || items.length === 0 || items.length > 100) {
+      return response.status(400).json({ error: 'Add between 1 and 100 valid products to your order.' });
+    }
+    let customer
+    try {
+      customer = validateCheckoutDetails(checkoutDetails, couponCode)
+    } catch (validationError) {
+      return response.status(400).json({ error: validationError instanceof Error ? validationError.message : 'Checkout details are invalid.' })
     }
 
     if (!paystackSecretKey) {
@@ -693,11 +700,17 @@ app.post('/api/paystack/initialize', async (request, response) => {
         return response.status(400).json({ error: `${prod.name} has an invalid selling price.` });
       }
       calculatedUsdSubtotal += (unitPriceCents / 100) * qty;
-      verifiedItems.push({ productId: String(prod.id), ...(variant ? { variantId } : {}), quantity: qty })
+      verifiedItems.push({
+        productId: String(prod.id),
+        productName: String(prod.name),
+        ...(variant ? { variantId, variantName: String(variant.name || '') } : {}),
+        quantity: qty,
+        unitPriceCents,
+      })
     }
 
-    const freeShipping = calculatedUsdSubtotal >= 150;
-    const finalUsd = calculatedUsdSubtotal + (freeShipping ? 0 : 15);
+    const shippingUsd = getShippingCost(calculatedUsdSubtotal);
+    const finalUsd = calculatedUsdSubtotal + shippingUsd;
 
     const ngnRate = 1480;
     const totalNgn = Math.round(finalUsd * ngnRate);
@@ -717,17 +730,23 @@ app.post('/api/paystack/initialize', async (request, response) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        email: customerEmail,
+        email: customer.email,
         amount: amountInKobo,
         currency: 'NGN',
         reference,
         callback_url: finalCallbackUrl,
         metadata: {
           orderId,
-          customerName: customerName || 'Morrow House Client',
-          customerEmail,
+          customerName: customer.fullName,
+          customerEmail: customer.email,
+          customerPhone: customer.phone,
+          shippingMethod: customer.shippingMethod,
+          shippingAddress: customer.shippingAddress,
+          billingAddress: customer.billingAddress,
+          sameBillingAddress: customer.sameBillingAddress,
           amountUsd: finalUsd,
           amountNgn: totalNgn,
+          shippingUsd,
           items: verifiedItems,
         },
         channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer'],
@@ -743,6 +762,9 @@ app.post('/api/paystack/initialize', async (request, response) => {
         reference: data.data.reference,
         orderId,
         amountNgn: totalNgn,
+        subtotalUsd: calculatedUsdSubtotal,
+        shippingUsd,
+        totalUsd: finalUsd,
       });
     } else {
       return response.status(400).json({ error: data.message || 'Failed to initialize Paystack transaction.' });
