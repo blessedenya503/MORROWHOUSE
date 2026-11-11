@@ -3141,3 +3141,395 @@ input:focus-visible {
 .checkout-payment-method > div { display: flex; align-items: center; gap: 11px; border: 1px solid var(--line); padding: 11px; }
 .checkout-final-total { border-top: 1px solid var(--line); padding-top: 12px; }
 .checkout-form > .checkout-button { margin-top: -6px; }
+
+/* -------------------------------------------------------------
+   ABOUT PAGE STYLES
+   ------------------------------------------------------------- */
+.about-page {
+  padding-bottom: 72px;
+}
+
+.about-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: clamp(32px, 6vw, 72px);
+  align-items: center;
+  margin: 40px 0 64px;
+}
+
+.about-hero-image-wrap {
+  position: relative;
+  min-height: 480px;
+  overflow: hidden;
+  background: #e9e5dc;
+}
+
+.about-hero-image {
+  width: 100%;
+  height: 100%;
+  min-height: 480px;
+  object-fit: cover;
+  display: block;
+}
+
+.about-hero-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.about-hero-copy h2 {
+  margin: 12px 0 18px;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: clamp(34px, 4.5vw, 48px);
+  font-weight: 400;
+  line-height: 1.05;
+}
+
+.about-hero-copy h2 em {
+  color: var(--wine);
+  font-weight: 400;
+}
+
+.about-hero-copy p {
+  margin: 0 0 16px;
+  color: #625e56;
+  font-size: 13px;
+  line-height: 1.85;
+}
+
+.about-stat-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.about-stat strong {
+  display: block;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 28px;
+  font-weight: 500;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.about-stat span {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+
+.about-pillars-section {
+  margin: 64px 0 54px;
+  padding-top: 48px;
+  border-top: 1px solid var(--line);
+}
+
+.about-section-header {
+  max-width: 680px;
+  margin-bottom: 36px;
+}
+
+.about-section-header h2 {
+  margin: 10px 0 12px;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: clamp(32px, 4vw, 42px);
+  font-weight: 400;
+}
+
+.about-section-header p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.about-pillars-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.about-pillar-card {
+  border: 1px solid var(--line);
+  padding: 32px 26px;
+  background: #fbfaf7;
+  display: flex;
+  flex-direction: column;
+}
+
+.about-pillar-card .pillar-num {
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  color: var(--wine);
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.about-pillar-card h3 {
+  margin: 0 0 12px;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.about-pillar-card p {
+  margin: 0;
+  color: #625e56;
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.about-workshop-callout {
+  margin-top: 56px;
+  padding: clamp(36px, 5vw, 56px);
+  background: #e9e5dc;
+  border: 1px solid var(--line);
+}
+
+.about-workshop-content {
+  max-width: 680px;
+}
+
+.about-workshop-content h2 {
+  margin: 10px 0 14px;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: clamp(30px, 3.8vw, 40px);
+  font-weight: 400;
+}
+
+.about-workshop-content p {
+  margin: 0 0 24px;
+  color: #514d45;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+/* -------------------------------------------------------------
+   FAQ PAGE STYLES
+   ------------------------------------------------------------- */
+.faq-page {
+  padding-bottom: 80px;
+}
+
+.faq-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 28px 0 36px;
+}
+
+.faq-accordion {
+  max-width: 860px;
+  border-top: 1px solid var(--line);
+}
+
+.faq-item {
+  border-bottom: 1px solid var(--line);
+}
+
+.faq-question {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  padding: 22px 4px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--ink);
+  transition: color 0.15s ease;
+}
+
+.faq-question:hover {
+  color: var(--wine);
+}
+
+.faq-question:focus-visible {
+  outline: 2px solid var(--wine);
+  outline-offset: 3px;
+}
+
+.faq-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--wine);
+}
+
+.faq-answer {
+  padding: 0 4px 24px;
+  color: #625e56;
+  font-size: 13px;
+  line-height: 1.85;
+  max-width: 760px;
+}
+
+.faq-answer p {
+  margin: 0 0 10px;
+}
+
+.faq-answer p:last-child {
+  margin-bottom: 0;
+}
+
+.faq-contact-card {
+  max-width: 860px;
+  margin-top: 48px;
+  padding: 32px;
+  background: #fbfaf7;
+  border: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+}
+
+.faq-contact-card h3 {
+  margin: 0 0 6px;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 26px;
+  font-weight: 500;
+}
+
+.faq-contact-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* -------------------------------------------------------------
+   CONTACT FORM UPGRADES
+   ------------------------------------------------------------- */
+.contact-form select {
+  width: 100%;
+  min-height: 45px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+
+.contact-form select:focus {
+  border-color: var(--wine);
+  outline: 2px solid color-mix(in srgb, var(--wine) 18%, transparent);
+  outline-offset: 1px;
+}
+
+.form-status-alert {
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-status-alert.is-error {
+  color: #9a4036;
+  background: #fdf2f2;
+  border: 1px solid #f0cfcb;
+}
+
+.form-status-alert.is-success {
+  color: #24583b;
+  background: #eef6f1;
+  border: 1px solid #cce5d5;
+}
+
+.contact-success-state {
+  display: grid;
+  gap: 12px;
+  padding: 36px 30px;
+  background: #fbfaf7;
+  border: 1px solid var(--line);
+  text-align: center;
+  justify-items: center;
+}
+
+.contact-success-state h3 {
+  margin: 6px 0 0;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 32px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.contact-success-state p {
+  max-width: 440px;
+  margin: 0 0 12px;
+  color: #625e56;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+/* -------------------------------------------------------------
+   NEWSLETTER FEEDBACK
+   ------------------------------------------------------------- */
+.newsletter-feedback {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.newsletter-feedback.is-success {
+  color: #24583b;
+}
+
+.newsletter-feedback.is-error {
+  color: #9a4036;
+}
+
+/* -------------------------------------------------------------
+   RESPONSIVE ADJUSTMENTS FOR NEW PAGES
+   ------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .about-hero-grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .about-pillars-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .faq-contact-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 600px) {
+  .about-stat-strip {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .faq-question {
+    font-size: 20px;
+    padding: 18px 0;
+  }
+}

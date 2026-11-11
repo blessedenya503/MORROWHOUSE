@@ -25,6 +25,26 @@ const categories = [
   { name: 'Everyday Solutions', label: 'Quiet daily rituals', image: 'photo-1544816155-12df9643f363' },
 ]
 
+function getCategorySlug(categoryName) {
+  if (!categoryName || categoryName === 'Everything') return 'everything'
+  return categoryName
+    .toLowerCase()
+    .replace(/&/g, '')
+    .replace(/é/g, 'e')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function getCategoryFromSlug(slug) {
+  if (!slug || slug === 'everything' || slug === 'all') return 'Everything'
+  const clean = slug.toLowerCase().trim()
+  const matched = categories.find((c) => getCategorySlug(c.name) === clean)
+  if (matched) return matched.name
+  const decoded = decodeURIComponent(clean)
+  const direct = categories.find((c) => c.name.toLowerCase() === decoded)
+  return direct ? direct.name : 'Everything'
+}
+
 const heroSlides = [
   { image: 'photo-1600210492486-724fe5c67fb0', alt: 'A sunlit living room layered with natural textures', note: 'THE ART OF STAYING IN', label: 'STAY IN' },
   { image: 'photo-1600607687939-ce8a6c25118c', alt: 'A calm, light-filled home with thoughtful furniture', note: 'ROOM TO SLOW DOWN', label: 'SLOW DOWN' },
@@ -496,14 +516,12 @@ function AddToBagButton({ product, variantId, className, onAdd, disabled = false
   )
 }
 
-function ShopPage({ products, activeCategory, setActiveCategory, searchTerm, setSearchTerm, onNavigate }) {
+function ShopPage({ products, activeCategory, onSelectCategory, subFilter = 'all', onSelectSubFilter, searchTerm, setSearchTerm, onNavigate }) {
   const visibleProducts = products.filter((product) => {
     const matchesCategory = activeCategory === 'Everything' || product.category === activeCategory
     const matchesSearch = `${product.name} ${product.detail} ${product.category} ${product.searchTerms}`.toLowerCase().includes(searchTerm.trim().toLowerCase())
     return matchesCategory && matchesSearch
   })
-
-  const [subFilter, setSubFilter] = useState('all')
 
   // Filter/sort products based on subFilter
   const filteredProducts = useMemo(() => {
@@ -515,10 +533,8 @@ function ShopPage({ products, activeCategory, setActiveCategory, searchTerm, set
       case 'new-arrivals':
         return [...visibleProducts].sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0))
       case 'under-200':
-        // Filter products under $200
         return visibleProducts.filter(product => product.price < 200)
       case 'best-sellers':
-        // Sort by name A-Z
         return [...visibleProducts].sort((a, b) => a.name.localeCompare(b.name))
       case 'all':
       default:
@@ -526,62 +542,71 @@ function ShopPage({ products, activeCategory, setActiveCategory, searchTerm, set
     }
   }, [visibleProducts, subFilter])
 
+  const subFilters = [
+    { id: 'all', label: 'All' },
+    { id: 'trending', label: 'Trending Now' },
+    { id: 'new-arrivals', label: 'New Arrivals' },
+    { id: 'under-200', label: 'Under $200' },
+    { id: 'best-sellers', label: 'Best Sellers' },
+  ]
+
   return (
     <motion.section className="shop-page section-wrap" aria-labelledby="shop-title" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
       <nav className="cart-breadcrumb" aria-label="Breadcrumb"><a href="/" onClick={(event) => onNavigate(event, '/')}>Home</a><span aria-hidden="true">/</span><span aria-current="page">Shop</span></nav>
       <div className="editorial-page-heading"><span className="overline">A ROOM OF YOUR OWN</span><h1 id="shop-title">Good things<br /><em>for living in.</em></h1><p>Considered pieces for slower mornings, softer evenings, and the spaces in between.</p></div>
       <div className="shop-toolbar">
         <div className="filter-tabs" role="group" aria-label="Filter products by category">
-          {['Everything', ...categories.map((category) => category.name)].map((category) => <button className={activeCategory === category ? 'filter-tab active' : 'filter-tab'} type="button" aria-pressed={activeCategory === category} key={category} onClick={() => setActiveCategory(category)}>{category}</button>)}
+          {['Everything', ...categories.map((category) => category.name)].map((category) => (
+            <button
+              className={activeCategory === category ? 'filter-tab active' : 'filter-tab'}
+              type="button"
+              aria-pressed={activeCategory === category}
+              key={category}
+              onClick={() => onSelectCategory(category)}
+            >
+              {category}
+            </button>
+          ))}
         </div>
-        <span className="product-count">{visibleProducts.length} considered favorites</span>
+        <span className="product-count">{filteredProducts.length} considered favorites</span>
       </div>
 
-      {/* Sub-filter options when viewing a specific category */}
-      {activeCategory !== 'Everything' && visibleProducts.length && (
+      {visibleProducts.length > 0 && (
         <div className="filter-tabs" style={{ marginTop: '1rem' }} role="group" aria-label="Sort and filter products">
-          <button
-            className={subFilter === 'all' ? 'filter-tab active' : 'filter-tab'}
-            type="button"
-            onClick={() => setSubFilter('all')}
-          >
-            All
-          </button>
-          <button
-            className={subFilter === 'trending' ? 'filter-tab active' : 'filter-tab'}
-            type="button"
-            onClick={() => setSubFilter('trending')}
-          >
-            Trending Now
-          </button>
-          <button
-            className={subFilter === 'new-arrivals' ? 'filter-tab active' : 'filter-tab'}
-            type="button"
-            onClick={() => setSubFilter('new-arrivals')}
-          >
-            New Arrivals
-          </button>
-          <button
-            className={subFilter === 'under-200' ? 'filter-tab active' : 'filter-tab'}
-            type="button"
-            onClick={() => setSubFilter('under-200')}
-          >
-            Under $200
-          </button>
-          <button
-            className={subFilter === 'best-sellers' ? 'filter-tab active' : 'filter-tab'}
-            type="button"
-            onClick={() => setSubFilter('best-sellers')}
-          >
-            Best Sellers
-          </button>
+          {subFilters.map((filter) => (
+            <button
+              key={filter.id}
+              className={subFilter === filter.id ? 'filter-tab active' : 'filter-tab'}
+              type="button"
+              aria-pressed={subFilter === filter.id}
+              onClick={() => onSelectSubFilter(filter.id)}
+            >
+              {filter.label}
+            </button>
+          ))}
         </div>
       )}
 
-      {visibleProducts.length ? activeCategory === 'Everything'
-        ? <ProductCollectionShelves products={visibleProducts} onNavigate={onNavigate} onSelectCategory={setActiveCategory} />
-        : <div className="product-grid shop-product-grid">{filteredProducts.map((product, index) => <ProductTile key={product.id} product={product} index={index} onNavigate={onNavigate} />)}</div>
-        : <div className="empty-results"><p>No pieces found for “{searchTerm}”.</p><button type="button" className="text-link" onClick={() => { setSearchTerm(''); setActiveCategory('Everything') }}>Clear filters <ArrowRight size={15} /></button></div>}
+      {visibleProducts.length ? (
+        activeCategory === 'Everything' && subFilter === 'all'
+          ? <ProductCollectionShelves products={visibleProducts} onNavigate={onNavigate} onSelectCategory={onSelectCategory} />
+          : <div className="product-grid shop-product-grid">{filteredProducts.map((product, index) => <ProductTile key={product.id} product={product} index={index} onNavigate={onNavigate} />)}</div>
+      ) : (
+        <div className="empty-results">
+          <p>No pieces found for “{searchTerm}”.</p>
+          <button
+            type="button"
+            className="text-link"
+            onClick={() => {
+              setSearchTerm('')
+              onSelectCategory('Everything')
+              onSelectSubFilter('all')
+            }}
+          >
+            Clear filters <ArrowRight size={15} />
+          </button>
+        </div>
+      )}
     </motion.section>
   )
 }
@@ -1017,8 +1042,503 @@ function TrackOrderPage({ onNavigate }) {
   return <motion.section className="track-page section-wrap" aria-labelledby="track-title" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}><nav className="cart-breadcrumb" aria-label="Breadcrumb"><a href="/" onClick={(event) => onNavigate(event, '/')}>Home</a><span>/</span><span aria-current="page">Track order</span></nav><div className="editorial-page-heading"><span className="overline">A LITTLE UPDATE ON THE WAY</span><h1 id="track-title">Where’s your<br /><em>order now?</em></h1><p>Enter the Paystack checkout reference from your confirmation page or receipt and the email used at checkout.</p></div><form className="track-order-form" onSubmit={handleSubmit}><label htmlFor="order-reference">Checkout reference</label><div><input id="order-reference" value={orderReference} onChange={(event) => setOrderReference(event.target.value)} placeholder="cs_test_…" required /><label htmlFor="receipt-email">Receipt email</label><input id="receipt-email" type="email" autoComplete="email" value={receiptEmail} onChange={(event) => setReceiptEmail(event.target.value)} placeholder="you@example.com" required /><button type="submit" className="checkout-button" disabled={isChecking}>{isChecking ? 'Checking…' : <>Find my order <ArrowRight size={16} /></>}</button></div></form>{error && <p className="checkout-notice track-notice" role="alert">{error}</p>}{order && <section className="track-result" aria-live="polite"><span className="overline">ORDER LOOKUP</span><h2>{order.paymentStatus === 'paid' ? 'Payment confirmed.' : 'Payment is not complete yet.'}</h2><p>{order.paymentStatus === 'paid' ? 'Your order is confirmed with Paystack.' : 'Paystack has not marked this payment as complete.'}</p>{order.orderTotal != null && <div className="summary-line"><span>Order total</span><strong>{formatPrice(order.orderTotal / 100)}</strong></div>}{order.customerEmail && <div className="summary-line"><span>Receipt sent to</span><strong>{order.customerEmail}</strong></div>}<div className="tracking-limit"><strong>Carrier updates</strong><p>Live shipment scans are not connected yet. Your shipping carrier and tracking number will be shared with you by email once the order is fulfilled.</p></div></section>}<p className="track-help">Need a hand? <a href="/contact" onClick={(event) => onNavigate(event, '/contact')}>Contact us <ArrowRight size={14} /></a></p></motion.section>
 }
 
+function AboutPage({ onNavigate }) {
+  return (
+    <motion.section
+      className="about-page section-wrap"
+      aria-labelledby="about-title"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+    >
+      <nav className="cart-breadcrumb" aria-label="Breadcrumb">
+        <a href="/" onClick={(event) => onNavigate(event, '/')}>Home</a>
+        <span aria-hidden="true">/</span>
+        <span aria-current="page">About</span>
+      </nav>
+
+      <div className="editorial-page-heading">
+        <span className="overline">THE MORROW HOUSE STORY</span>
+        <h1 id="about-title">Objects for the art<br /><em>of being home.</em></h1>
+        <p>Founded on the belief that a home is not staged, but gathered over time with pieces that bring calm, texture, and lasting warmth.</p>
+      </div>
+
+      <div className="about-hero-grid">
+        <div className="about-hero-image-wrap">
+          <img
+            src={imageUrl('photo-1600210492486-724fe5c67fb0', 1600)}
+            alt="Warm sunlit living room with natural materials and considered objects"
+            className="about-hero-image"
+            loading="lazy"
+          />
+          <span className="story-stamp">Quietly<br />gathered.</span>
+        </div>
+        <div className="about-hero-copy">
+          <span className="overline">OUR PHILOSOPHY</span>
+          <h2>A slower pace,<br /><em>a truer room.</em></h2>
+          <p>
+            Morrow House began with a straightforward conviction: the objects we bring into our daily spaces should make us slow down, feel settled, and take pleasure in everyday rituals.
+          </p>
+          <p>
+            Instead of disposable decor cycles and fleeting novelties, we focus on heirloom materiality—honest oak and walnut, tactile unglazed ceramics, spun brass, and natural woven linens that soften and improve with age.
+          </p>
+          <div className="about-stat-strip">
+            <div className="about-stat">
+              <strong>100%</strong>
+              <span>Considered &amp; tested designs</span>
+            </div>
+            <div className="about-stat">
+              <strong>30-Day</strong>
+              <span>In-home return window</span>
+            </div>
+            <div className="about-stat">
+              <strong>Direct</strong>
+              <span>Artisan &amp; workshop sourcing</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="about-pillars-section">
+        <div className="about-section-header">
+          <span className="overline">THE THREE PILLARS</span>
+          <h2>How we curate every piece</h2>
+          <p>Each object in our catalog must satisfy three unnegotiable standards before it is welcomed into Morrow House.</p>
+        </div>
+
+        <div className="about-pillars-grid">
+          <article className="about-pillar-card">
+            <span className="pillar-num">01</span>
+            <h3>Considered Living</h3>
+            <p>Every piece is designed to earn its place in a real room. We value proportion, calm palettes, and utility that feels effortless rather than styled or performative.</p>
+          </article>
+
+          <article className="about-pillar-card">
+            <span className="pillar-num">02</span>
+            <h3>Enduring Materials</h3>
+            <p>We select solid hardwoods, natural stones, brushed unlacquered metals, and pure woven textiles that wear gracefully into daily living and develop their own patina.</p>
+          </article>
+
+          <article className="about-pillar-card">
+            <span className="pillar-num">03</span>
+            <h3>Honest Provenance</h3>
+            <p>We work directly with specialized ateliers, stone masons, and textile mills worldwide—bypassing traditional distributor markups to offer heirloom quality honestly.</p>
+          </article>
+        </div>
+      </div>
+
+      <div className="about-workshop-callout">
+        <div className="about-workshop-content">
+          <span className="overline">ATELIER &amp; STUDIO</span>
+          <h2>Crafted for rituals that repeat.</h2>
+          <p>From the morning coffee cup that feels balanced in your palm to the muted amber glow that signals the day is done, our collections are made to ground your daily life.</p>
+          <div className="policy-page-links">
+            <a href="/shop" onClick={(event) => onNavigate(event, '/shop')}>Explore the collection <ArrowRight size={15} /></a>
+            <a href="/contact" onClick={(event) => onNavigate(event, '/contact')}>Speak with our design desk <ArrowRight size={15} /></a>
+          </div>
+        </div>
+      </div>
+    </motion.section>
+  )
+}
+
+const faqData = [
+  {
+    category: 'Orders',
+    items: [
+      {
+        question: 'How do I place an order?',
+        answer: 'Browse our collection, select any desired finishes or variants, and click "Add to bag". When you are ready, navigate to your bag or click "Checkout" to enter your delivery address and complete payment securely via Paystack or PayPal.',
+      },
+      {
+        question: 'Can I cancel or modify my order after placing it?',
+        answer: 'Because our studio and fulfillment partners prepare shipments promptly, order modifications or address corrections must be requested within 2 hours of placement. Contact our design desk at concierge@morrowhouse.com or via our contact form with your order reference.',
+      },
+      {
+        question: 'How do I track my order status?',
+        answer: 'You can check your order status at any time on our Track Order page using your receipt email and checkout reference. Once your order has been dispatched from our workshop, you will receive an email confirmation with direct tracking details.',
+      },
+      {
+        question: 'Do you offer gift packaging or personalized notes?',
+        answer: 'All Morrow House orders are carefully wrapped in unbleached tissue and signature protective craft packaging. If you would like a handwritten gift message included, please reach out to concierge@morrowhouse.com immediately after placing your order.',
+      },
+    ],
+  },
+  {
+    category: 'Shipping & Delivery',
+    items: [
+      {
+        question: 'Where do you ship?',
+        answer: 'We currently deliver throughout the United States and Canada, with select international destinations supported through our regional payment gateways. If your country is not yet supported at checkout, contact our design desk.',
+      },
+      {
+        question: 'What are your shipping rates?',
+        answer: 'Standard ground shipping is complimentary on all orders of $150 or more. For orders under $150, ground shipping is a flat $15. Exact shipping costs are calculated and confirmed prior to payment.',
+      },
+      {
+        question: 'How long does delivery take?',
+        answer: 'Orders are prepared within 1–2 business days. Standard domestic ground transit typically takes 4–7 business days. Deliveries to remote locations or during peak holiday periods may experience minor carrier delays.',
+      },
+      {
+        question: 'What if an item arrives damaged?',
+        answer: 'Each Morrow House piece is rigorously packed to withstand transit. If your piece arrives damaged or defective, please take photographs of the packaging and item and contact us within 48 hours of delivery. We will immediately arrange a complimentary replacement or full refund.',
+      },
+    ],
+  },
+  {
+    category: 'Payments & Security',
+    items: [
+      {
+        question: 'What payment methods do you accept?',
+        answer: 'We accept all major debit and credit cards (Visa, Mastercard, American Express), PayPal, and Paystack. All transactions are processed through encrypted, PCI-DSS compliant gateways.',
+      },
+      {
+        question: 'Can I view prices in my local currency?',
+        answer: 'Yes. You can switch your display currency anytime using the currency selector in the header (USD, EUR, GBP, CAD, AUD, NGN, GHS, KES, ZAR, INR). Converted rates are updated daily via Exchange Rate API. Final checkout is processed in USD.',
+      },
+      {
+        question: 'Is my payment information secure?',
+        answer: 'Completely. Morrow House never stores your full payment credentials or card security codes. All transactions utilize 256-bit SSL encryption and strict tokenization.',
+      },
+    ],
+  },
+  {
+    category: 'Returns & Refunds',
+    items: [
+      {
+        question: 'What is your return window?',
+        answer: 'We offer a 30-day return window beginning the day your delivery is completed. Returned pieces must be unused, in their original condition, and safely packaged in their original protective boxes.',
+      },
+      {
+        question: 'How do I start a return?',
+        answer: 'Contact our design desk through the Contact page or email concierge@morrowhouse.com with your order reference and the item you wish to return. We will supply return documentation and mailing instructions.',
+      },
+      {
+        question: 'When will I receive my refund?',
+        answer: 'Once your return parcel arrives at our inspection atelier, approved refunds are credited back to your original payment method within 3–5 business days. Your card issuer may require an additional 5–10 business days to post the balance.',
+      },
+      {
+        question: 'Are shipping charges refundable?',
+        answer: 'Original shipping fees are non-refundable unless the return is due to a defect or transit error on our part. For standard discretionary returns, return postage is the responsibility of the customer.',
+      },
+    ],
+  },
+  {
+    category: 'Product Care & Craft',
+    items: [
+      {
+        question: 'How should I care for solid wood, ceramic, and metal items?',
+        answer: 'Dust gently with a dry or lightly dampened microfiber cloth. Avoid harsh chemical sprays, acidic cleaners, or abrasive sponges. Solid wood benefits from an occasional conditioning with food-safe wax or oil to preserve moisture.',
+      },
+      {
+        question: 'Are Morrow House items covered by a guarantee?',
+        answer: 'Yes. Every Morrow House piece carries a 1-year craftsmanship guarantee against material defects and structural failures under regular domestic use.',
+      },
+      {
+        question: 'Where are Morrow House products made?',
+        answer: 'We collaborate with specialized artisan workshops and vetted manufacturing partners across Japan, Portugal, Italy, and domestic ateliers who share our standards for ethical craftsmanship, material honesty, and fair labor.',
+      },
+    ],
+  },
+]
+
+function FaqPage({ onNavigate }) {
+  const [activeCategory, setActiveCategory] = useState('All')
+  const [openIndex, setOpenIndex] = useState(null)
+
+  const faqCategories = ['All', ...faqData.map((d) => d.category)]
+
+  const filteredFaqs = useMemo(() => {
+    if (activeCategory === 'All') {
+      return faqData.flatMap((cat) => cat.items.map((item) => ({ ...item, category: cat.category })))
+    }
+    const found = faqData.find((d) => d.category === activeCategory)
+    return found ? found.items.map((item) => ({ ...item, category: found.category })) : []
+  }, [activeCategory])
+
+  function toggleQuestion(idx) {
+    setOpenIndex((current) => (current === idx ? null : idx))
+  }
+
+  return (
+    <motion.section
+      className="faq-page section-wrap"
+      aria-labelledby="faq-title"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+    >
+      <nav className="cart-breadcrumb" aria-label="Breadcrumb">
+        <a href="/" onClick={(event) => onNavigate(event, '/')}>Home</a>
+        <span aria-hidden="true">/</span>
+        <span aria-current="page">FAQ</span>
+      </nav>
+
+      <div className="editorial-page-heading">
+        <span className="overline">FREQUENTLY ASKED QUESTIONS</span>
+        <h1 id="faq-title">Clear answers<br /><em>for your home.</em></h1>
+        <p>Everything you need to know about placing an order, shipping destinations, payment security, returns, and taking care of your pieces.</p>
+      </div>
+
+      <div className="faq-categories filter-tabs" role="group" aria-label="Filter FAQ topics">
+        {faqCategories.map((cat) => (
+          <button
+            key={cat}
+            type="button"
+            className={activeCategory === cat ? 'filter-tab active' : 'filter-tab'}
+            aria-pressed={activeCategory === cat}
+            onClick={() => {
+              setActiveCategory(cat)
+              setOpenIndex(null)
+            }}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      <div className="faq-accordion" role="region" aria-label="Questions and answers">
+        {filteredFaqs.map((faq, index) => {
+          const isOpen = openIndex === index
+          return (
+            <div className="faq-item" key={faq.question}>
+              <button
+                type="button"
+                className="faq-question"
+                onClick={() => toggleQuestion(index)}
+                aria-expanded={isOpen}
+                aria-controls={`faq-answer-${index}`}
+              >
+                <span>{faq.question}</span>
+                <span className="faq-icon" aria-hidden="true">
+                  {isOpen ? <Minus size={18} /> : <Plus size={18} />}
+                </span>
+              </button>
+              {isOpen && (
+                <div id={`faq-answer-${index}`} className="faq-answer">
+                  <p>{faq.answer}</p>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="faq-contact-card">
+        <div>
+          <span className="overline">STILL HAVE QUESTIONS?</span>
+          <h3>Our design desk is here to help.</h3>
+          <p>Reach out to our concierge for assistance with specific orders, custom sourcing, or styling advice.</p>
+        </div>
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+          <a href="/contact" className="checkout-button" onClick={(event) => onNavigate(event, '/contact')}>
+            Contact us <ArrowRight size={15} />
+          </a>
+        </div>
+      </div>
+    </motion.section>
+  )
+}
+
 function ContactPage({ onNavigate }) {
-  return <motion.section className="information-page section-wrap" aria-labelledby="contact-title" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}><nav className="cart-breadcrumb" aria-label="Breadcrumb"><a href="/" onClick={(event) => onNavigate(event, '/')}>Home</a><span>/</span><span aria-current="page">Contact</span></nav><div className="editorial-page-heading"><span className="overline">THE MORROW HOUSE DESIGN DESK</span><h1 id="contact-title">A real person,<br /><em>right this way.</em></h1><p>For help with a piece, an order, or a room that needs a little thought, send us a note.</p></div><div className="contact-layout"><div className="contact-note"><span className="overline">WE’RE HERE TO HELP</span><h2>Let’s find a good answer.</h2><p>For an existing order, include the checkout reference from your receipt so we can find the right details.</p><a href="/track-order" onClick={(event) => onNavigate(event, '/track-order')}>Look up an order <ArrowRight size={15} /></a></div><form className="contact-form" action="mailto:hello@morrowhouse.com" method="post" encType="text/plain"><label htmlFor="contact-name">Your name</label><input id="contact-name" name="name" autoComplete="name" required /><label htmlFor="contact-email">Email address</label><input id="contact-email" name="email" type="email" autoComplete="email" required /><label htmlFor="contact-order">Order reference <span>optional</span></label><input id="contact-order" name="order_reference" /><label htmlFor="contact-message">How can we help?</label><textarea id="contact-message" name="message" rows="5" required /><button type="submit" className="checkout-button">Open your email app <ArrowRight size={16} /></button><p>Your email app will open with your note ready to send. No message is submitted or stored on this site.</p></form></div></motion.section>
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [subject, setSubject] = useState('General Inquiry')
+  const [orderReference, setOrderReference] = useState('')
+  const [message, setMessage] = useState('')
+  const [status, setStatus] = useState('idle') // 'idle' | 'submitting' | 'success' | 'error'
+  const [errorMessage, setErrorMessage] = useState('')
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    setErrorMessage('')
+    setStatus('submitting')
+
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          subject: subject.trim(),
+          orderReference: orderReference.trim(),
+          message: message.trim(),
+        }),
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to submit your message. Please try again.')
+      }
+
+      setStatus('success')
+    } catch (err) {
+      setStatus('error')
+      setErrorMessage(err instanceof Error ? err.message : 'Unable to submit your message. Please try again.')
+    }
+  }
+
+  function handleReset() {
+    setName('')
+    setEmail('')
+    setSubject('General Inquiry')
+    setOrderReference('')
+    setMessage('')
+    setStatus('idle')
+    setErrorMessage('')
+  }
+
+  return (
+    <motion.section
+      className="information-page section-wrap"
+      aria-labelledby="contact-title"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+    >
+      <nav className="cart-breadcrumb" aria-label="Breadcrumb">
+        <a href="/" onClick={(event) => onNavigate(event, '/')}>Home</a>
+        <span aria-hidden="true">/</span>
+        <span aria-current="page">Contact</span>
+      </nav>
+
+      <div className="editorial-page-heading">
+        <span className="overline">THE MORROW HOUSE DESIGN DESK</span>
+        <h1 id="contact-title">A real person,<br /><em>right this way.</em></h1>
+        <p>For help with a piece, an order, or a room that needs a little thought, send us a note.</p>
+      </div>
+
+      <div className="contact-layout">
+        <div className="contact-note">
+          <span className="overline">WE’RE HERE TO HELP</span>
+          <h2>Let’s find a good answer.</h2>
+          <p>
+            Whether you are coordinating dimensions for a dining room, looking up shipment timing, or exploring custom trade projects, our team is at your service.
+          </p>
+          <div style={{ marginTop: '20px', display: 'grid', gap: '14px', fontSize: '12px', color: 'var(--muted)', lineHeight: '1.6' }}>
+            <div>
+              <strong style={{ color: 'var(--ink)', display: 'block' }}>Concierge Desk</strong>
+              <span>concierge@morrowhouse.com</span>
+            </div>
+            <div>
+              <strong style={{ color: 'var(--ink)', display: 'block' }}>Studio Hours</strong>
+              <span>Monday – Friday, 9:00 AM – 6:00 PM EST</span>
+            </div>
+            <div>
+              <strong style={{ color: 'var(--ink)', display: 'block' }}>Existing Orders</strong>
+              <p style={{ margin: '4px 0 0' }}>Have your checkout reference ready from your confirmation receipt.</p>
+            </div>
+          </div>
+          <div style={{ marginTop: '24px' }}>
+            <a href="/track-order" onClick={(event) => onNavigate(event, '/track-order')}>
+              Look up an existing order <ArrowRight size={15} />
+            </a>
+          </div>
+        </div>
+
+        {status === 'success' ? (
+          <div className="contact-success-state" role="status">
+            <CheckCircle size={36} color="var(--wine)" />
+            <h3>Your note is on its way.</h3>
+            <p>
+              Thank you, {name || 'friend'}. Your message has been safely delivered to our design desk. A member of our concierge team will respond within 1–2 business days.
+            </p>
+            <button type="button" className="checkout-button" onClick={handleReset} style={{ marginTop: '12px' }}>
+              Send another note
+            </button>
+          </div>
+        ) : (
+          <form className="contact-form" onSubmit={handleSubmit} noValidate>
+            {status === 'error' && (
+              <div className="form-status-alert is-error" role="alert">
+                <WarningCircle size={16} />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
+            <label htmlFor="contact-name">Your name</label>
+            <input
+              id="contact-name"
+              name="name"
+              type="text"
+              autoComplete="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Eleanor Vance"
+              required
+              disabled={status === 'submitting'}
+            />
+
+            <label htmlFor="contact-email">Email address</label>
+            <input
+              id="contact-email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+              disabled={status === 'submitting'}
+            />
+
+            <label htmlFor="contact-subject">Topic / inquiry type</label>
+            <select
+              id="contact-subject"
+              name="subject"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              disabled={status === 'submitting'}
+            >
+              <option value="General Inquiry">General Inquiry</option>
+              <option value="Order & Delivery Status">Order &amp; Delivery Status</option>
+              <option value="Product Advice & Sizing">Product Advice &amp; Sizing</option>
+              <option value="Return or Exchange Request">Return or Exchange Request</option>
+              <option value="Interior Styling & Trade">Interior Styling &amp; Trade</option>
+            </select>
+
+            <label htmlFor="contact-order">Order reference <span>optional</span></label>
+            <input
+              id="contact-order"
+              name="order_reference"
+              type="text"
+              value={orderReference}
+              onChange={(e) => setOrderReference(e.target.value)}
+              placeholder="e.g. cs_live_... from your receipt"
+              disabled={status === 'submitting'}
+            />
+
+            <label htmlFor="contact-message">How can we help?</label>
+            <textarea
+              id="contact-message"
+              name="message"
+              rows={5}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Tell us what you're looking for, or describe the question you have..."
+              required
+              disabled={status === 'submitting'}
+            />
+
+            <button type="submit" className="checkout-button" disabled={status === 'submitting'}>
+              {status === 'submitting' ? (
+                <>
+                  <CircleNotch size={16} className="spinner" />
+                  Sending your note…
+                </>
+              ) : (
+                <>
+                  Send your note <ArrowRight size={16} />
+                </>
+              )}
+            </button>
+            <p>Our team reviews inquiries Monday through Friday and responds personally.</p>
+          </form>
+        )}
+      </div>
+    </motion.section>
+  )
 }
 
 const policyPages = {
@@ -1040,6 +1560,82 @@ function NotFoundPage({ onNavigate }) {
   return <section className="payment-return section-wrap"><span className="overline">THAT PAGE ISN’T HERE</span><h1>Let’s find<br /><em>something good.</em></h1><p>The link may have changed. The shop is right where you left it.</p><a className="hero-cta" href="/shop" onClick={(event) => onNavigate(event, '/shop')}>Visit the shop <ArrowRight size={17} /></a></section>
 }
 
+function NewsletterForm() {
+  const [email, setEmail] = useState('')
+  const [status, setStatus] = useState('idle') // 'idle' | 'loading' | 'success' | 'error'
+  const [feedback, setFeedback] = useState('')
+
+  async function handleNewsletterSubmit(event) {
+    event.preventDefault()
+    setFeedback('')
+
+    const cleanEmail = email.trim().toLowerCase()
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      setStatus('error')
+      setFeedback('Please enter a valid email address.')
+      return
+    }
+
+    setStatus('loading')
+    try {
+      const response = await fetch('/api/newsletter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail }),
+      })
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || 'Subscription failed. Please try again.')
+      }
+
+      setStatus('success')
+      setFeedback(result.message || 'Thank you for subscribing to Morrow House notes.')
+      setEmail('')
+    } catch (err) {
+      setStatus('error')
+      setFeedback(err instanceof Error ? err.message : 'Unable to subscribe. Please try again.')
+    }
+  }
+
+  return (
+    <div>
+      {status === 'success' ? (
+        <div className="newsletter-feedback is-success" role="status">
+          <CheckCircle size={18} />
+          <span>{feedback}</span>
+        </div>
+      ) : (
+        <form className="newsletter-form" onSubmit={handleNewsletterSubmit}>
+          <label className="sr-only" htmlFor="newsletter-email">Email address</label>
+          <input
+            id="newsletter-email"
+            type="email"
+            placeholder="Your email address"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            disabled={status === 'loading'}
+          />
+          <button
+            type="submit"
+            aria-label="Join the Morrow House newsletter"
+            disabled={status === 'loading'}
+          >
+            {status === 'loading' ? <CircleNotch size={18} className="spinner" /> : <ArrowRight size={19} />}
+          </button>
+        </form>
+      )}
+      {status === 'error' && (
+        <div className="newsletter-feedback is-error" role="alert">
+          <WarningCircle size={16} />
+          <span>{feedback}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function App() {
   const heroRef = useRef(null)
   const reduceMotion = useReducedMotion()
@@ -1049,7 +1645,43 @@ function App() {
     offset: ['start start', 'end start'],
   })
   const heroImageY = useTransform(heroProgress, [0, 1], [0, 36])
-  const [activeCategory, setActiveCategory] = useState('Everything')
+  const [activeCategory, setActiveCategory] = useState(() => {
+    if (typeof window !== 'undefined' && getRoutePath() === '/shop') {
+      const catSlug = new URLSearchParams(window.location.search).get('category')
+      return catSlug ? getCategoryFromSlug(catSlug) : 'Everything'
+    }
+    return 'Everything'
+  })
+  const [subFilter, setSubFilter] = useState(() => {
+    if (typeof window !== 'undefined' && getRoutePath() === '/shop') {
+      return new URLSearchParams(window.location.search).get('subfilter') || 'all'
+    }
+    return 'all'
+  })
+
+  function handleShopCategoryChange(category) {
+    setActiveCategory(category)
+    const params = new URLSearchParams(window.location.search)
+    if (category && category !== 'Everything') {
+      params.set('category', getCategorySlug(category))
+    } else {
+      params.delete('category')
+    }
+    const qs = params.toString() ? `?${params.toString()}` : ''
+    window.history.pushState({}, '', `/shop${qs}`)
+  }
+
+  function handleShopSubFilterChange(newSubFilter) {
+    setSubFilter(newSubFilter)
+    const params = new URLSearchParams(window.location.search)
+    if (newSubFilter && newSubFilter !== 'all') {
+      params.set('subfilter', newSubFilter)
+    } else {
+      params.delete('subfilter')
+    }
+    const qs = params.toString() ? `?${params.toString()}` : ''
+    window.history.pushState({}, '', `/shop${qs}`)
+  }
   const [products, setProducts] = useState([])
   const [currency, setCurrency] = useState(getSavedCurrency)
   const [rates, setRates] = useState({ USD: 1 })
@@ -1192,6 +1824,8 @@ function App() {
       '/checkout': 'Checkout',
       '/checkout/success': 'Payment confirmed',
       '/shop': 'Shop',
+      '/about': 'About our house',
+      '/faq': 'Frequently asked questions',
       '/track-order': 'Track your order',
       '/contact': 'Contact us',
       '/refunds': 'Refund & return policy',
@@ -1251,6 +1885,13 @@ function App() {
       const path = getRoutePath()
       setCurrentPath(path)
       setMobileMenuOpen(false)
+      if (path === '/shop') {
+        const params = new URLSearchParams(window.location.search)
+        const cat = params.get('category')
+        const sub = params.get('subfilter')
+        setActiveCategory(cat ? getCategoryFromSlug(cat) : 'Everything')
+        setSubFilter(sub || 'all')
+      }
       const sessionId = new URLSearchParams(window.location.search).get('session_id')
       setCheckoutStatus(path === '/checkout/success' && !sessionId ? 'error' : 'checking')
       setCheckoutError(path === '/checkout/success' && !sessionId ? 'No Paystack checkout reference was included in the return link.' : '')
@@ -1348,12 +1989,21 @@ function App() {
 
   function navigateTo(path) {
     window.history.pushState({}, '', path)
-    setCurrentPath(getRoutePath())
+    const route = getRoutePath()
+    setCurrentPath(route)
     setSearchOpen(false)
     setMobileMenuOpen(false)
+    if (route === '/shop') {
+      const searchStr = path.includes('?') ? path.slice(path.indexOf('?')) : window.location.search
+      const params = new URLSearchParams(searchStr)
+      const cat = params.get('category')
+      const sub = params.get('subfilter')
+      setActiveCategory(cat ? getCategoryFromSlug(cat) : 'Everything')
+      setSubFilter(sub || 'all')
+    }
     const sessionId = new URLSearchParams(window.location.search).get('session_id')
-    setCheckoutStatus(path === '/checkout/success' && !sessionId ? 'error' : 'checking')
-    setCheckoutError(path === '/checkout/success' && !sessionId ? 'No Paystack checkout reference was included in the return link.' : '')
+    setCheckoutStatus(route === '/checkout/success' && !sessionId ? 'error' : 'checking')
+    setCheckoutError(route === '/checkout/success' && !sessionId ? 'No Paystack checkout reference was included in the return link.' : '')
     window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' })
   }
 
@@ -1418,6 +2068,7 @@ function App() {
               if (el) el.scrollIntoView({ behavior: 'smooth' })
             }
           }}>New Arrivals</a>
+          <a href="/about" aria-current={currentPath === '/about' ? 'page' : undefined} onClick={(event) => handleNavigate(event, '/about')}>About</a>
           <a href="/track-order" aria-current={currentPath === '/track-order' ? 'page' : undefined} onClick={(event) => handleNavigate(event, '/track-order')}>Track order</a>
         </nav>
         <div className="header-actions">
@@ -1466,12 +2117,25 @@ function App() {
           </motion.div>
         ) : isShopPage ? (
           <motion.div key="shop-page" initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ duration: 0.24 }}>
-            <ShopPage products={products} activeCategory={activeCategory} setActiveCategory={setActiveCategory} searchTerm={searchTerm} setSearchTerm={setSearchTerm} onNavigate={handleNavigate} />
+            <ShopPage
+              products={products}
+              activeCategory={activeCategory}
+              onSelectCategory={handleShopCategoryChange}
+              subFilter={subFilter}
+              onSelectSubFilter={handleShopSubFilterChange}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              onNavigate={handleNavigate}
+            />
           </motion.div>
         ) : isProductPage ? (
           <ProductPage product={currentProduct} products={products} onNavigate={handleNavigate} onAdd={handleAddToBag} />
         ) : currentPath === '/track-order' ? (
           <TrackOrderPage onNavigate={handleNavigate} />
+        ) : currentPath === '/about' ? (
+          <AboutPage onNavigate={handleNavigate} />
+        ) : currentPath === '/faq' ? (
+          <FaqPage onNavigate={handleNavigate} />
         ) : currentPath === '/contact' ? (
           <ContactPage onNavigate={handleNavigate} />
         ) : policyPages[currentPath] ? (
@@ -1620,11 +2284,9 @@ function App() {
           <motion.span className="overline" variants={reduceMotion ? undefined : revealItem}>A GOOD NOTE, NOW AND THEN</motion.span>
           <motion.h2 variants={reduceMotion ? undefined : revealItem}>For the love of being home.</motion.h2>
           <motion.p variants={reduceMotion ? undefined : revealItem}>New finds, good rooms, and first dibs. Never the usual inbox noise.</motion.p>
-          <motion.form className="newsletter-form" onSubmit={(event) => event.preventDefault()} variants={reduceMotion ? undefined : revealItem}>
-            <label className="sr-only" htmlFor="newsletter-email">Email address</label>
-            <input id="newsletter-email" type="email" placeholder="Your email address" required />
-            <button type="submit" aria-label="Join the Morrow House newsletter"><ArrowRight size={19} /></button>
-          </motion.form>
+          <motion.div variants={reduceMotion ? undefined : revealItem}>
+            <NewsletterForm />
+          </motion.div>
           <motion.span className="newsletter-small" variants={reduceMotion ? undefined : revealItem}>By signing up, you agree to receive occasional notes from us.</motion.span>
         </motion.section>
           </motion.div>
@@ -1634,9 +2296,9 @@ function App() {
 
       <motion.footer className="site-footer" initial={reduceMotion ? false : { opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.5 }}>
         <div className="footer-brand"><a className="wordmark footer-wordmark" href="/" onClick={(event) => handleNavigate(event, '/') }><span className="wordmark-symbol" aria-hidden="true">m.</span><span>MORROW<br />HOUSE</span></a><p>Objects for the art of being home.</p><a className="rate-attribution" href="https://www.exchangerate-api.com" target="_blank" rel="noreferrer">Rates by Exchange Rate API</a><span>Display conversions are estimates; checkout is in USD.</span><span>© 2026 Morrow House</span></div>
-        <div className="footer-link-group"><strong>Explore</strong><a href="/" onClick={(event) => handleNavigate(event, '/')}>Home</a><a href="/shop" onClick={(event) => handleNavigate(event, '/shop')}>Shop all</a><a href="#trending" onClick={(event) => { if (!isHomePage) handleNavigate(event, '/#trending'); else document.getElementById('trending')?.scrollIntoView({ behavior: 'smooth' }) }}>Trending Now</a><a href="#new-arrivals" onClick={(event) => { if (!isHomePage) handleNavigate(event, '/#new-arrivals'); else document.getElementById('new-arrivals')?.scrollIntoView({ behavior: 'smooth' }) }}>New Arrivals</a><a href="/cart" onClick={(event) => handleNavigate(event, '/cart')}>Your bag</a><a href="/track-order" onClick={(event) => handleNavigate(event, '/track-order')}>Track order</a></div>
-        <div className="footer-link-group"><strong>Categories</strong>{categories.map((cat) => <a key={cat.name} href="/shop" onClick={(event) => { setActiveCategory(cat.name); handleNavigate(event, '/shop') }}>{cat.name}</a>)}</div>
-        <div className="footer-link-group"><strong>Here to help</strong><a href="/contact" onClick={(event) => handleNavigate(event, '/contact')}>Contact us</a><a href="/refunds" onClick={(event) => handleNavigate(event, '/refunds')}>Refunds & returns</a><a href="/shipping" onClick={(event) => handleNavigate(event, '/shipping')}>Shipping</a></div>
+        <div className="footer-link-group"><strong>Explore</strong><a href="/" onClick={(event) => handleNavigate(event, '/')}>Home</a><a href="/shop" onClick={(event) => handleNavigate(event, '/shop')}>Shop all</a><a href="/about" onClick={(event) => handleNavigate(event, '/about')}>About</a><a href="#trending" onClick={(event) => { if (!isHomePage) handleNavigate(event, '/#trending'); else document.getElementById('trending')?.scrollIntoView({ behavior: 'smooth' }) }}>Trending Now</a><a href="#new-arrivals" onClick={(event) => { if (!isHomePage) handleNavigate(event, '/#new-arrivals'); else document.getElementById('new-arrivals')?.scrollIntoView({ behavior: 'smooth' }) }}>New Arrivals</a><a href="/cart" onClick={(event) => handleNavigate(event, '/cart')}>Your bag</a><a href="/track-order" onClick={(event) => handleNavigate(event, '/track-order')}>Track order</a></div>
+        <div className="footer-link-group"><strong>Categories</strong>{categories.map((cat) => <a key={cat.name} href={`/shop?category=${getCategorySlug(cat.name)}`} onClick={(event) => { handleNavigate(event, `/shop?category=${getCategorySlug(cat.name)}`) }}>{cat.name}</a>)}</div>
+        <div className="footer-link-group"><strong>Here to help</strong><a href="/contact" onClick={(event) => handleNavigate(event, '/contact')}>Contact us</a><a href="/faq" onClick={(event) => handleNavigate(event, '/faq')}>FAQ</a><a href="/refunds" onClick={(event) => handleNavigate(event, '/refunds')}>Refunds & returns</a><a href="/shipping" onClick={(event) => handleNavigate(event, '/shipping')}>Shipping</a></div>
         <div className="footer-link-group"><strong>The details</strong><a href="/privacy" onClick={(event) => handleNavigate(event, '/privacy')}>Privacy</a><a href="/terms" onClick={(event) => handleNavigate(event, '/terms')}>Terms & conditions</a></div>
       </motion.footer>
 

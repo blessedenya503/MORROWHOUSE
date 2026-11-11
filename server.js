@@ -982,6 +982,92 @@ app.get('/api/paystack/verify/:reference', async (request, response) => {
   }
 });
 
+app.post('/api/newsletter', async (request, response) => {
+  response.set('Cache-Control', 'no-store')
+
+  const email = typeof request.body?.email === 'string' ? request.body.email.trim().toLowerCase() : ''
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+  if (!email || !emailRegex.test(email) || email.length > 254) {
+    return response.status(400).json({ error: 'Please provide a valid email address.' })
+  }
+
+  try {
+    await safeInsertSyncLog(
+      'newsletter_subscriber',
+      email,
+      'success',
+      'Customer subscribed to newsletter.',
+      {
+        email,
+        source: 'homepage_newsletter',
+        subscribedAt: new Date().toISOString(),
+      }
+    )
+
+    return response.json({
+      success: true,
+      message: 'Thank you for subscribing to Morrow House notes.',
+    })
+  } catch (error) {
+    return response.status(500).json({
+      error: 'Unable to process subscription. Please try again shortly.',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    })
+  }
+})
+
+app.post('/api/contact', async (request, response) => {
+  response.set('Cache-Control', 'no-store')
+
+  const name = typeof request.body?.name === 'string' ? request.body.name.trim() : ''
+  const email = typeof request.body?.email === 'string' ? request.body.email.trim().toLowerCase() : ''
+  const subject = typeof request.body?.subject === 'string' ? request.body.subject.trim() : 'General Inquiry'
+  const message = typeof request.body?.message === 'string' ? request.body.message.trim() : ''
+  const orderReference = typeof request.body?.orderReference === 'string' ? request.body.orderReference.trim() : ''
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+  if (!name || name.length < 2 || name.length > 120) {
+    return response.status(400).json({ error: 'Please enter your name (2-120 characters).' })
+  }
+
+  if (!email || !emailRegex.test(email) || email.length > 254) {
+    return response.status(400).json({ error: 'Please provide a valid email address.' })
+  }
+
+  if (!message || message.length < 10 || message.length > 3000) {
+    return response.status(400).json({ error: 'Please enter a message between 10 and 3,000 characters.' })
+  }
+
+  try {
+    await safeInsertSyncLog(
+      'contact_inquiry',
+      email,
+      'pending',
+      `Customer contact inquiry: ${subject.slice(0, 60)}`,
+      {
+        name,
+        email,
+        subject: subject.slice(0, 120),
+        message: message.slice(0, 3000),
+        orderReference: orderReference.slice(0, 60),
+        submittedAt: new Date().toISOString(),
+      }
+    )
+
+    return response.json({
+      success: true,
+      message: 'Thank you. A member of our design desk will be in touch shortly.',
+    })
+  } catch (error) {
+    return response.status(500).json({
+      error: 'Unable to deliver your message. Please try again or email concierge@morrowhouse.com.',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    })
+  }
+})
+
 if (process.env.NODE_ENV === 'production') {
   const indexFile = path.join(root, 'dist', 'index.html')
   app.use(express.static(path.join(root, 'dist')))
