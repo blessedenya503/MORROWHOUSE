@@ -1,8 +1,8 @@
 export const previewProducts = [
-  { id: 'lune-chair', name: 'Lune Lounge Chair', category: 'Living', price: 890, stock: 7, reorderAt: 5, image: 'photo-1567538096630-e0c55bd6374c', sku: 'MH-LIV-001' },
+  { id: 'lune-chair', name: 'Lune Lounge Chair', category: 'Bedroom & Comfort', price: 890, stock: 7, reorderAt: 5, image: 'photo-1567538096630-e0c55bd6374c', sku: 'MH-BED-001' },
   { id: 'sora-lamp', name: 'Sora Table Lamp', category: 'Lighting', price: 245, stock: 3, reorderAt: 5, image: 'photo-1507473885765-e6ed057f782c', sku: 'MH-LGT-002' },
-  { id: 'form-vase', name: 'Form No. 02 Vessel', category: 'Objects', price: 118, stock: 2, reorderAt: 4, image: 'photo-1578500494198-246f612d3b3d', sku: 'MH-OBJ-003' },
-  { id: 'cloud-throw', name: 'Cloud Weave Throw', category: 'Living', price: 195, stock: 14, reorderAt: 5, image: 'photo-1600210491892-03d54c0aaf87', sku: 'MH-LIV-004' },
+  { id: 'form-vase', name: 'Form No. 02 Vessel', category: 'Home Décor', price: 118, stock: 2, reorderAt: 4, image: 'photo-1578500494198-246f612d3b3d', sku: 'MH-DEC-003' },
+  { id: 'cloud-throw', name: 'Cloud Weave Throw', category: 'Bedroom & Comfort', price: 195, stock: 14, reorderAt: 5, image: 'photo-1600210491892-03d54c0aaf87', sku: 'MH-BED-004' },
 ]
 
 export const previewOrders = [

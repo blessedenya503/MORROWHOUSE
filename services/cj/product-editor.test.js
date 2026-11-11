@@ -27,7 +27,7 @@ test('readiness requires all editorial, quality, price, image and SEO checks', (
   Object.assign(content, {
     title: 'Considered storage basket',
     description: 'A beautifully made storage basket for considered spaces at home.',
-    category: 'Objects',
+    category: 'Organization & Storage',
     primaryImage: 'https://cdn.example.com/item.jpg',
     seo: { title: 'Considered Storage Basket', description: 'A woven storage basket for a considered and beautifully organised home.' },
     pricing: { ...content.pricing, sellingPrice: 45 },
@@ -50,7 +50,7 @@ test('publishing payload excludes supplier identifiers and internal prices', () 
   Object.assign(content, {
     title: 'Considered storage basket',
     description: 'A beautifully made storage basket for considered spaces at home.',
-    category: 'Objects',
+    category: 'Organization & Storage',
     primaryImage: 'https://cdn.example.com/item.jpg',
     pricing: { supplierCost: 12, shippingCost: 3, additionalCost: 2, sellingPrice: 45, discountedPrice: 40, currency: 'USD' },
   })

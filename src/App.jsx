@@ -18,9 +18,11 @@ const revealGroup = {
 }
 
 const categories = [
-  { name: 'Living', label: 'A softer place to land', image: 'photo-1600210492486-724fe5c67fb0' },
+  { name: 'Organization & Storage', label: 'Everything in its place', image: 'photo-1584622650111-993a426fbf0a' },
+  { name: 'Bedroom & Comfort', label: 'A softer place to land', image: 'photo-1600210492486-724fe5c67fb0' },
+  { name: 'Home Décor', label: 'The little things, considered', image: 'photo-1490312278390-ab64016e0aa9' },
   { name: 'Lighting', label: 'Set a different mood', image: 'photo-1507473885765-e6ed057f782c' },
-  { name: 'Objects', label: 'The little things, considered', image: 'photo-1490312278390-ab64016e0aa9' },
+  { name: 'Everyday Solutions', label: 'Quiet daily rituals', image: 'photo-1544816155-12df9643f363' },
 ]
 
 const heroSlides = [
@@ -508,14 +510,15 @@ function ShopPage({ products, activeCategory, setActiveCategory, searchTerm, set
     if (!visibleProducts.length) return visibleProducts
 
     switch (subFilter) {
+      case 'trending':
+        return visibleProducts.filter(product => product.is_trending || product.public_data?.isTrending || product.badge?.toLowerCase().includes('trending'))
       case 'new-arrivals':
-        // Sort by ID descending (assuming higher ID = newer)
-        return [...visibleProducts].sort((a, b) => b.id - a.id)
+        return [...visibleProducts].sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0))
       case 'under-200':
         // Filter products under $200
         return visibleProducts.filter(product => product.price < 200)
       case 'best-sellers':
-        // Placeholder: sort by name A-Z (since we don't have real sales data)
+        // Sort by name A-Z
         return [...visibleProducts].sort((a, b) => a.name.localeCompare(b.name))
       case 'all':
       default:
@@ -543,6 +546,13 @@ function ShopPage({ products, activeCategory, setActiveCategory, searchTerm, set
             onClick={() => setSubFilter('all')}
           >
             All
+          </button>
+          <button
+            className={subFilter === 'trending' ? 'filter-tab active' : 'filter-tab'}
+            type="button"
+            onClick={() => setSubFilter('trending')}
+          >
+            Trending Now
           </button>
           <button
             className={subFilter === 'new-arrivals' ? 'filter-tab active' : 'filter-tab'}
@@ -1291,6 +1301,14 @@ function App() {
       .includes(searchTerm.trim().toLowerCase())
     return matchesCategory && matchesSearch
   })
+  const trendingProducts = useMemo(() => {
+    const explicit = products.filter((product) => product.is_trending || product.public_data?.isTrending || product.badge?.toLowerCase().includes('trending'))
+    if (explicit.length > 0) return explicit
+    return products.slice(0, 4)
+  }, [products])
+  const newArrivalsProducts = useMemo(() => {
+    return [...products].sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0)).slice(0, 4)
+  }, [products])
   const cartProducts = Object.entries(cartItems).flatMap(([cartKey, quantity]) => {
     const { productId, variantId } = getCartLineKeyParts(cartKey)
     const product = products.find((item) => item.id === productId)
@@ -1380,6 +1398,26 @@ function App() {
         <nav id="main-navigation" className={`main-nav${mobileMenuOpen ? ' is-open' : ''}`} aria-label="Main navigation">
           <a href="/" aria-current={isHomePage ? 'page' : undefined} onClick={(event) => handleNavigate(event, '/')}>Home</a>
           <a href="/shop" aria-current={isShopPage ? 'page' : undefined} onClick={(event) => handleNavigate(event, '/shop')}>Shop</a>
+          <a href="#trending" onClick={(event) => {
+            if (!isHomePage) {
+              handleNavigate(event, '/#trending')
+            } else {
+              event.preventDefault()
+              setMobileMenuOpen(false)
+              const el = document.getElementById('trending')
+              if (el) el.scrollIntoView({ behavior: 'smooth' })
+            }
+          }}>Trending Now</a>
+          <a href="#new-arrivals" onClick={(event) => {
+            if (!isHomePage) {
+              handleNavigate(event, '/#new-arrivals')
+            } else {
+              event.preventDefault()
+              setMobileMenuOpen(false)
+              const el = document.getElementById('new-arrivals')
+              if (el) el.scrollIntoView({ behavior: 'smooth' })
+            }
+          }}>New Arrivals</a>
           <a href="/track-order" aria-current={currentPath === '/track-order' ? 'page' : undefined} onClick={(event) => handleNavigate(event, '/track-order')}>Track order</a>
         </nav>
         <div className="header-actions">
@@ -1514,7 +1552,7 @@ function App() {
             </motion.div>
             <motion.div className="product-toolbar" initial={reduceMotion ? false : 'hidden'} whileInView="visible" viewport={{ once: true, amount: 0.7 }} variants={reduceMotion ? undefined : revealItem}>
               <div className="filter-tabs" role="group" aria-label="Filter products by category">
-                {['Everything', 'Living', 'Lighting', 'Objects'].map((category) => (
+                {['Everything', ...categories.map((category) => category.name)].map((category) => (
                   <button className={activeCategory === category ? 'filter-tab active' : 'filter-tab'} type="button" aria-pressed={activeCategory === category} key={category} onClick={() => setActiveCategory(category)}>{category}</button>
                 ))}
               </div>
@@ -1532,6 +1570,34 @@ function App() {
             ) : (
               <motion.div className="empty-results" initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}><p>No pieces found for “{searchTerm}”.</p><button type="button" className="text-link" onClick={() => { setSearchTerm(''); setActiveCategory('Everything') }}>See everything <ArrowRight size={15} /></button></motion.div>
             )}
+          </div>
+        </section>
+
+        <section className="bestsellers-section" id="trending" style={{ paddingTop: '2.5rem' }}>
+          <div className="section-wrap">
+            <motion.div className="section-intro product-intro" initial={reduceMotion ? false : 'hidden'} whileInView="visible" viewport={{ once: true, amount: 0.65 }} variants={reduceMotion ? undefined : revealItem}>
+              <div><span className="overline">COMMUNITY HIGHLIGHTS</span><h2>Trending Now</h2><p style={{ margin: '6px 0 0', color: 'var(--muted)', fontSize: '15px' }}>Pieces explicitly marked and celebrated by our design community.</p></div>
+              <a className="text-link" href="/shop" onClick={(event) => { handleNavigate(event, '/shop') }}>Shop all trending <ArrowRight size={15} /></a>
+            </motion.div>
+            <div className="product-collection-row">
+              {trendingProducts.map((product, index) => (
+                <ProductTile key={`trending-${product.id}`} product={product} index={index} onNavigate={handleNavigate} isFavorite={favorites?.includes(product.id)} onToggleFavorite={toggleFavorite} />
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="bestsellers-section" id="new-arrivals" style={{ paddingTop: '2.5rem' }}>
+          <div className="section-wrap">
+            <motion.div className="section-intro product-intro" initial={reduceMotion ? false : 'hidden'} whileInView="visible" viewport={{ once: true, amount: 0.65 }} variants={reduceMotion ? undefined : revealItem}>
+              <div><span className="overline">FRESH FROM OUR STUDIOS</span><h2>New Arrivals</h2><p style={{ margin: '6px 0 0', color: 'var(--muted)', fontSize: '15px' }}>Recently published additions, ordered by arrival date and ready for home.</p></div>
+              <a className="text-link" href="/shop" onClick={(event) => { handleNavigate(event, '/shop') }}>Explore latest finds <ArrowRight size={15} /></a>
+            </motion.div>
+            <div className="product-collection-row">
+              {newArrivalsProducts.map((product, index) => (
+                <ProductTile key={`new-${product.id}`} product={product} index={index} onNavigate={handleNavigate} isFavorite={favorites?.includes(product.id)} onToggleFavorite={toggleFavorite} />
+              ))}
+            </div>
           </div>
         </section>
 
@@ -1568,7 +1634,8 @@ function App() {
 
       <motion.footer className="site-footer" initial={reduceMotion ? false : { opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.5 }}>
         <div className="footer-brand"><a className="wordmark footer-wordmark" href="/" onClick={(event) => handleNavigate(event, '/') }><span className="wordmark-symbol" aria-hidden="true">m.</span><span>MORROW<br />HOUSE</span></a><p>Objects for the art of being home.</p><a className="rate-attribution" href="https://www.exchangerate-api.com" target="_blank" rel="noreferrer">Rates by Exchange Rate API</a><span>Display conversions are estimates; checkout is in USD.</span><span>© 2026 Morrow House</span></div>
-        <div className="footer-link-group"><strong>Explore</strong><a href="/" onClick={(event) => handleNavigate(event, '/')}>Home</a><a href="/shop" onClick={(event) => handleNavigate(event, '/shop')}>Shop all</a><a href="/cart" onClick={(event) => handleNavigate(event, '/cart')}>Your bag</a><a href="/track-order" onClick={(event) => handleNavigate(event, '/track-order')}>Track order</a></div>
+        <div className="footer-link-group"><strong>Explore</strong><a href="/" onClick={(event) => handleNavigate(event, '/')}>Home</a><a href="/shop" onClick={(event) => handleNavigate(event, '/shop')}>Shop all</a><a href="#trending" onClick={(event) => { if (!isHomePage) handleNavigate(event, '/#trending'); else document.getElementById('trending')?.scrollIntoView({ behavior: 'smooth' }) }}>Trending Now</a><a href="#new-arrivals" onClick={(event) => { if (!isHomePage) handleNavigate(event, '/#new-arrivals'); else document.getElementById('new-arrivals')?.scrollIntoView({ behavior: 'smooth' }) }}>New Arrivals</a><a href="/cart" onClick={(event) => handleNavigate(event, '/cart')}>Your bag</a><a href="/track-order" onClick={(event) => handleNavigate(event, '/track-order')}>Track order</a></div>
+        <div className="footer-link-group"><strong>Categories</strong>{categories.map((cat) => <a key={cat.name} href="/shop" onClick={(event) => { setActiveCategory(cat.name); handleNavigate(event, '/shop') }}>{cat.name}</a>)}</div>
         <div className="footer-link-group"><strong>Here to help</strong><a href="/contact" onClick={(event) => handleNavigate(event, '/contact')}>Contact us</a><a href="/refunds" onClick={(event) => handleNavigate(event, '/refunds')}>Refunds & returns</a><a href="/shipping" onClick={(event) => handleNavigate(event, '/shipping')}>Shipping</a></div>
         <div className="footer-link-group"><strong>The details</strong><a href="/privacy" onClick={(event) => handleNavigate(event, '/privacy')}>Privacy</a><a href="/terms" onClick={(event) => handleNavigate(event, '/terms')}>Terms & conditions</a></div>
       </motion.footer>

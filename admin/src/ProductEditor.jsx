@@ -27,6 +27,14 @@ const readinessItems = [
   ['previewReviewed', 'Product preview inspected'],
 ]
 
+const OFFICIAL_CATEGORIES = [
+  'Organization & Storage',
+  'Bedroom & Comfort',
+  'Home Décor',
+  'Lighting',
+  'Everyday Solutions',
+]
+
 function emptyContent(product) {
   const images = Array.isArray(product.images)
     ? product.images.filter((url) => typeof url === 'string').map((url) => ({ url, alt: '', source: 'supplier' }))
@@ -35,7 +43,7 @@ function emptyContent(product) {
     title: product.name || 'Untitled product',
     shortDescription: '',
     description: product.description || '',
-    category: product.category || 'Objects',
+    category: product.category || 'Home Décor',
     subcategory: '',
     tags: [],
     brand: '',
@@ -82,6 +90,19 @@ function TextAreaField({ label, value, onChange, ...props }) {
   return <label className="editor-field"><span>{label}</span><textarea value={value ?? ''} onChange={(event) => onChange(event.target.value)} {...props} /></label>
 }
 
+function SelectField({ label, value, onChange, options = [], ...props }) {
+  return (
+    <label className="editor-field">
+      <span>{label}</span>
+      <select value={value ?? ''} onChange={(event) => onChange(event.target.value)} {...props}>
+        {options.map((opt) => (
+          <option key={opt} value={opt}>{opt}</option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 export default function ProductEditor({
   products = [],
   error = '',
@@ -120,14 +141,16 @@ export default function ProductEditor({
     counts[product.editorStatus] = (counts[product.editorStatus] || 0) + 1
     return counts
   }, {}), [products])
+  const [categoryFilter, setCategoryFilter] = useState('ALL')
   const filteredProducts = useMemo(() => {
     const term = query.trim().toLowerCase()
     return products.filter((product) => {
       const matchesTab = activeTab === 'OVERVIEW' || activeTab === 'ALL' || product.editorStatus === activeTab
+      const matchesCategory = categoryFilter === 'ALL' || product.category === categoryFilter
       const matchesQuery = !term || `${product.name} ${product.id} ${product.sku} ${product.category}`.toLowerCase().includes(term)
-      return matchesTab && matchesQuery
+      return matchesTab && matchesCategory && matchesQuery
     })
-  }, [activeTab, products, query])
+  }, [activeTab, categoryFilter, products, query])
   const totalLandedCost = Number(content?.pricing?.supplierCost || 0) + Number(content?.pricing?.shippingCost || 0) + Number(content?.pricing?.additionalCost || 0)
   const sellingPrice = Number(content?.pricing?.sellingPrice || 0)
   const grossProfit = sellingPrice - totalLandedCost
@@ -286,7 +309,7 @@ export default function ProductEditor({
           <nav className="editor-section-tabs" aria-label="Product editing sections">{editorSections.map((section) => <button key={section} type="button" className={editorSection === section ? 'is-active' : ''} onClick={() => setEditorSection(section)}>{section}</button>)}</nav>
           {(notice || localError || error) && <div className={`editor-notice ${localError || error ? 'is-error' : ''}`} role={localError || error ? 'alert' : 'status'}>{localError || error ? <WarningCircle size={15} /> : <Check size={15} />}{localError || error || notice}</div>}
 
-          {editorSection === 'Basic' && <div className="editor-card"><div className="editor-card-heading"><div><span className="eyebrow">STOREFRONT CONTENT</span><h3>Basic product information</h3></div><span className="editor-private-note">Supplier source is preserved separately</span></div><div className="editor-form-grid"><TextField label="Product title" value={content.title} onChange={(value) => updateField('title', value)} maxLength={200} /><TextField label="Category" value={content.category} onChange={(value) => updateField('category', value)} placeholder="Living, Lighting, Objects…" /><TextField label="Subcategory" value={content.subcategory} onChange={(value) => updateField('subcategory', value)} /><TextField label="Brand or manufacturer" value={content.brand} onChange={(value) => updateField('brand', value)} /><TextField label="Product type" value={content.productType} onChange={(value) => updateField('productType', value)} /><TextField label="Tags (comma separated)" value={(content.tags || []).join(', ')} onChange={(value) => updateField('tags', value.split(',').map((tag) => tag.trim()).filter(Boolean))} /><TextAreaField className="wide" label="Short description" value={content.shortDescription} onChange={(value) => updateField('shortDescription', value)} rows={2} maxLength={300} /><TextAreaField className="wide" label="Full product description" value={content.description} onChange={(value) => updateField('description', value)} rows={8} maxLength={20000} placeholder="Write verified product details. Do not add unconfirmed specifications." /></div><details className="editor-source-details"><summary>View original CJ source content</summary><p><strong>{selectedProduct.originalData?.product?.productNameEn || selectedProduct.originalData?.product?.name || selectedProduct.name}</strong></p><p>{selectedProduct.originalData?.product?.description || selectedProduct.description || 'No original description available.'}</p><small>Supplier ID: {selectedProduct.id} · Supplier SKU: {selectedProduct.supplierSku || 'Not provided'}</small></details></div>}
+          {editorSection === 'Basic' && <div className="editor-card"><div className="editor-card-heading"><div><span className="eyebrow">STOREFRONT CONTENT</span><h3>Basic product information</h3></div><span className="editor-private-note">Supplier source is preserved separately</span></div><div className="editor-form-grid"><TextField label="Product title" value={content.title} onChange={(value) => updateField('title', value)} maxLength={200} /><SelectField label="Category" value={content.category || OFFICIAL_CATEGORIES[0]} onChange={(value) => updateField('category', value)} options={OFFICIAL_CATEGORIES} /><TextField label="Subcategory" value={content.subcategory} onChange={(value) => updateField('subcategory', value)} /><TextField label="Brand or manufacturer" value={content.brand} onChange={(value) => updateField('brand', value)} /><TextField label="Product type" value={content.productType} onChange={(value) => updateField('productType', value)} /><TextField label="Tags (comma separated)" value={(content.tags || []).join(', ')} onChange={(value) => updateField('tags', value.split(',').map((tag) => tag.trim()).filter(Boolean))} /><TextAreaField className="wide" label="Short description" value={content.shortDescription} onChange={(value) => updateField('shortDescription', value)} rows={2} maxLength={300} /><TextAreaField className="wide" label="Full product description" value={content.description} onChange={(value) => updateField('description', value)} rows={8} maxLength={20000} placeholder="Write verified product details. Do not add unconfirmed specifications." /></div><details className="editor-source-details"><summary>View original CJ source content</summary><p><strong>{selectedProduct.originalData?.product?.productNameEn || selectedProduct.originalData?.product?.name || selectedProduct.name}</strong></p><p>{selectedProduct.originalData?.product?.description || selectedProduct.description || 'No original description available.'}</p><small>Supplier ID: {selectedProduct.id} · Supplier SKU: {selectedProduct.supplierSku || 'Not provided'}</small></details></div>}
 
           {editorSection === 'Images' && <div className="editor-card"><div className="editor-card-heading"><div><span className="eyebrow">IMAGE STUDIO</span><h3>Choose the images customers see</h3></div><span className="editor-private-note">Supplier originals remain unchanged</span></div><div className="editor-image-primary">{activeImage ? <img src={imageUrl(activeImage, 1100)} alt={imageList.find((image) => image.url === activeImage)?.alt || content.title} /> : <div className="editor-image-empty"><Image size={24} />Add an image to continue</div>}<div><span>Primary image</span><strong>{imageList.findIndex((image) => image.url === activeImage) + 1} of {imageList.length || 0}</strong></div></div><div className="editor-image-add"><TextField label="Add image URL" value={imageUrlInput} onChange={setImageUrlInput} placeholder="https://…" /><button type="button" className="editor-secondary-button" onClick={addImageUrl}><Plus size={14} />Add URL</button><label className="editor-upload-button">Upload image<input type="file" accept="image/jpeg,image/png,image/webp,image/avif" onChange={(event) => { uploadImage(event.target.files?.[0]); event.target.value = '' }} /></label></div><div className="editor-image-grid">{imageList.map((image, index) => <article key={`${image.url}-${index}`} className={`editor-image-card${image.url === content.primaryImage ? ' is-primary' : ''}`} draggable onDragStart={() => setDraggedImage(index)} onDragOver={(event) => event.preventDefault()} onDrop={() => { reorderImage(draggedImage, index); setDraggedImage(-1) }}><img src={imageUrl(image.url, 400)} alt={image.alt || ''} /><span className="editor-image-source">{image.source || 'image'}</span><TextField label="Alt text" value={image.alt} onChange={(value) => updateField('images', imageList.map((entry, entryIndex) => entryIndex === index ? { ...entry, alt: value } : entry))} maxLength={300} /><div className="editor-image-actions"><button type="button" onClick={() => updateField('primaryImage', image.url)} aria-pressed={image.url === content.primaryImage}>{image.url === content.primaryImage ? 'Primary image' : 'Make primary'}</button><button type="button" aria-label="Move image up" disabled={!index} onClick={() => reorderImage(index, index - 1)}><ArrowUp size={13} /></button><button type="button" aria-label="Move image down" disabled={index === imageList.length - 1} onClick={() => reorderImage(index, index + 1)}><ArrowDown size={13} /></button><button type="button" aria-label="Remove image" onClick={() => { const next = imageList.filter((_, entryIndex) => entryIndex !== index); updateField('images', next); if (content.primaryImage === image.url) updateField('primaryImage', next[0]?.url || '') }}><Trash size={13} /></button></div></article>)}</div><label className="editor-check"><input type="checkbox" checked={Boolean(content.quality.imagesReviewed)} onChange={(event) => updateNested('quality', 'imagesReviewed', event.target.checked)} />I reviewed every image and its public alt text.</label></div>}
 
@@ -330,7 +353,23 @@ export default function ProductEditor({
       </section>
       {(notice || localError || error) && <div className={`editor-notice ${localError || error ? 'is-error' : ''}`} role={localError || error ? 'alert' : 'status'}>{localError || error ? <WarningCircle size={15} /> : <Check size={15} />}{localError || error || notice}</div>}
       <section className="editor-card">
-        <div className="editor-card-heading"><div><span className="eyebrow">MERCHANDISING WORKSPACE</span><h3>Product workflow</h3></div><label className="editor-list-search"><MagnifyingGlass size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter products" /></label></div>
+        <div className="editor-card-heading">
+          <div><span className="eyebrow">MERCHANDISING WORKSPACE</span><h3>Product workflow</h3></div>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <select
+              value={categoryFilter}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+              className="editor-category-filter"
+              aria-label="Filter by category"
+            >
+              <option value="ALL">All Categories</option>
+              {OFFICIAL_CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+            <label className="editor-list-search"><MagnifyingGlass size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter products" /></label>
+          </div>
+        </div>
         <nav className="editor-status-tabs" aria-label="Filter products by workflow status">{statusTabs.map((tab) => <button key={tab.id} type="button" className={activeTab === tab.id ? 'is-active' : ''} onClick={() => setActiveTab(tab.id)}>{tab.label}{tab.id !== 'OVERVIEW' && tab.id !== 'ALL' && <span>{statusCounts[tab.id] || 0}</span>}</button>)}</nav>
         <div className="editor-product-list">{filteredProducts.length ? filteredProducts.map((product) => {
           const itemContent = product.editorContent && Object.keys(product.editorContent).length ? product.editorContent : emptyContent(product)

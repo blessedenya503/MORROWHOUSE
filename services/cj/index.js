@@ -355,15 +355,23 @@ export function classifyMorrowHouseCategory(product = {}) {
     product.description,
   ].filter(Boolean).join(' ').toLowerCase()
 
-  if (/\b(lamp|lighting|light fixture|chandelier|sconce|pendant light|bulb|lantern)\b/.test(text)) {
+  if (/\b(lamp|lighting|light fixture|chandelier|sconce|pendant light|bulb|lantern|night light|led light)\b/.test(text)) {
     return 'Lighting'
   }
 
-  if (/\b(furniture|sofa|couch|chair|armchair|stool|bench|bed|bedding|mattress|curtain|drape|rug|carpet|table|desk|shelf|shelving|cabinet|wardrobe)\b/.test(text)) {
-    return 'Living'
+  if (/\b(laundry|hamper|basket|shoe rack|storage|sorter|organizer|closet|bin|shelf|shelving|drawer|cabinet)\b/.test(text)) {
+    return 'Organization & Storage'
   }
 
-  return 'Objects'
+  if (/\b(bed|bedding|mattress|lounge chair|massage chair|rocking chair|relaxation chair|sofa|couch|chair|armchair|stool|bench|recliner|throw|blanket|pillow|corduroy)\b/.test(text)) {
+    return 'Bedroom & Comfort'
+  }
+
+  if (/\b(bubble paper|grinder|washer|jumper cable|booster cable|jump lead|comb|cleaner|tool|hardware|charger|flashlight)\b/.test(text)) {
+    return 'Everyday Solutions'
+  }
+
+  return 'Home Décor'
 }
 
 export function summarizeProductName(value) {

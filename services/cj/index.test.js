@@ -189,7 +189,7 @@ test('CJ import payload normalizes supplier details into a backend-safe record',
 
   assert.equal(payload.cjProductId, 'cj-123')
   assert.equal(payload.name, 'Lune Chair')
-  assert.equal(payload.category, 'Living')
+  assert.equal(payload.category, 'Bedroom & Comfort')
   assert.equal(payload.images.length, 1)
   assert.equal(payload.variants[0].cjVariantId, 'v-1')
   assert.equal(payload.isActive, false)
@@ -214,7 +214,7 @@ test('CJ import payload maps the official product query response into the review
 
   assert.equal(payload.cjProductId, '1463036925509242880')
   assert.equal(payload.name, 'Crystal Ball Salt Stone Moisturizing And Humidifying')
-  assert.equal(payload.category, 'Objects')
+  assert.equal(payload.category, 'Home Décor')
   assert.equal(payload.sku, 'CJJT1360421')
   assert.equal(payload.price, 5.68)
   assert.equal(payload.images[0], 'https://cdn.example.com/salt-stone.jpg')
@@ -251,8 +251,10 @@ test('CJ products are assigned to the closest Morrow House storefront category',
   const { classifyMorrowHouseCategory } = await loadFreshModule()
 
   assert.equal(classifyMorrowHouseCategory({ productNameEn: 'Ceramic Table Lamp', categoryName: 'Home Lighting' }), 'Lighting')
-  assert.equal(classifyMorrowHouseCategory({ productNameEn: 'Linen Lounge Chair', categoryName: 'Home Furniture' }), 'Living')
-  assert.equal(classifyMorrowHouseCategory({ productNameEn: 'Crystal Ball Salt Stone Humidifier', categoryName: 'Home Decor' }), 'Objects')
+  assert.equal(classifyMorrowHouseCategory({ productNameEn: 'Linen Lounge Chair', categoryName: 'Home Furniture' }), 'Bedroom & Comfort')
+  assert.equal(classifyMorrowHouseCategory({ productNameEn: 'Crystal Ball Salt Stone Humidifier', categoryName: 'Home Decor' }), 'Home Décor')
+  assert.equal(classifyMorrowHouseCategory({ productNameEn: 'Foldable Laundry Hamper Basket', categoryName: 'Storage' }), 'Organization & Storage')
+  assert.equal(classifyMorrowHouseCategory({ productNameEn: 'Electric Coffee Bean Grinder', categoryName: 'Kitchen' }), 'Everyday Solutions')
 })
 
 test('long product copy is made concise for customer-facing display', async () => {

@@ -64,7 +64,7 @@ set original_data = jsonb_build_object(
       'title', coalesce(nullif(name, ''), 'Untitled product'),
       'shortDescription', '',
       'description', coalesce(description, ''),
-      'category', coalesce(category, 'Objects'),
+      'category', coalesce(category, 'Home Décor'),
       'subcategory', '',
       'tags', '[]'::jsonb,
       'brand', '',

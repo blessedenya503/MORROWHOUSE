@@ -432,10 +432,10 @@ app.get('/api/exchange-rates', async (_request, response) => {
 })
 
 const fallbackProducts = [
-  { id: 'lune-chair', name: 'Lune Lounge Chair', category: 'Living', price_cents: 89000, stock: 7, image: 'photo-1567538096630-e0c55bd6374c', is_active: true, detail: 'Sculptural lounge chair in textured oat bouclé with solid smoked oak frame.' },
-  { id: 'sora-lamp', name: 'Sora Table Lamp', category: 'Lighting', price_cents: 24500, stock: 3, image: 'photo-1507473885765-e6ed057f782c', is_active: true, detail: 'Hand-cast ceramic lamp with a warm diffused linen shade.' },
-  { id: 'form-vase', name: 'Form No. 02 Vessel', category: 'Objects', price_cents: 11800, stock: 2, image: 'photo-1578500494198-246f612d3b3d', is_active: true, detail: 'Unglazed stoneware vessel designed for botanical stems or quiet display.' },
-  { id: 'cloud-throw', name: 'Cloud Weave Throw', category: 'Living', price_cents: 19500, stock: 14, image: 'photo-1600210491892-03d54c0aaf87', is_active: true, detail: 'Woven virgin wool throw with subtle fringed border in chalk white.' },
+  { id: 'lune-chair', name: 'Lune Lounge Chair', category: 'Bedroom & Comfort', price_cents: 89000, stock: 7, image: 'photo-1567538096630-e0c55bd6374c', is_active: true, is_trending: true, detail: 'Sculptural lounge chair in textured oat bouclé with solid smoked oak frame.' },
+  { id: 'sora-lamp', name: 'Sora Table Lamp', category: 'Lighting', price_cents: 24500, stock: 3, image: 'photo-1507473885765-e6ed057f782c', is_active: true, is_trending: true, detail: 'Hand-cast ceramic lamp with a warm diffused linen shade.' },
+  { id: 'form-vase', name: 'Form No. 02 Vessel', category: 'Home Décor', price_cents: 11800, stock: 2, image: 'photo-1578500494198-246f612d3b3d', is_active: true, is_trending: false, detail: 'Unglazed stoneware vessel designed for botanical stems or quiet display.' },
+  { id: 'cloud-throw', name: 'Cloud Weave Throw', category: 'Bedroom & Comfort', price_cents: 19500, stock: 14, image: 'photo-1600210491892-03d54c0aaf87', is_active: true, is_trending: false, detail: 'Woven virgin wool throw with subtle fringed border in chalk white.' },
 ]
 
 export async function getStoreProducts() {
@@ -443,7 +443,7 @@ export async function getStoreProducts() {
   try {
     const { data, error } = await supabase
       .from('products')
-      .select('id,name,category,price_cents,stock,image,is_active,public_detail,public_data')
+      .select('id,name,category,price_cents,stock,image,is_active,public_detail,public_data,updated_at')
       .eq('is_active', true)
       .order('name', { ascending: true })
     if (error) throw error
@@ -495,6 +495,8 @@ app.get('/api/products', async (_request, response) => {
       specifications: product.public_data?.specifications || {},
       variants: Array.isArray(product.public_data?.variants) ? product.public_data.variants : [],
       seo: product.public_data?.seo || {},
+      is_trending: Boolean(product.public_data?.isTrending || product.is_trending),
+      updated_at: product.updated_at || null,
       stock: Math.max(0, Number(product.stock) || 0),
     })) })
   } catch {

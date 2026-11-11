@@ -31,7 +31,7 @@ export function createProductEditorContent(product = {}) {
     title: String(product.name || 'Untitled product'),
     shortDescription: '',
     description: String(product.description || ''),
-    category: String(product.category || 'Objects'),
+    category: String(product.category || 'Home Décor'),
     subcategory: '',
     tags: [],
     brand: '',

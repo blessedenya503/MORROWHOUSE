@@ -524,7 +524,7 @@ input:focus-visible {
 
 .category-grid {
   display: grid;
-  grid-template-columns: 1.08fr 0.84fr 0.84fr;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 13px;
 }
 
